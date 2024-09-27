@@ -1,9 +1,11 @@
 // Format for platform files
 pub const PLATFORM_FORMAT: &str = "{platform}.{domain}";
 
+use bevy_ecs::component::Component;
+use bevy_reflect::Reflect;
 use strum_macros::{Display, EnumString};
 
-#[derive(EnumString, Hash, Eq, Debug, Display, PartialEq, Clone, Copy)]
+#[derive(EnumString, Hash, Eq, Debug, Display, PartialEq, Clone, Copy, Reflect, Component)]
 #[strum(serialize_all = "snake_case")]
 #[strum(ascii_case_insensitive)]
 pub enum Platform {

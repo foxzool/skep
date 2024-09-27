@@ -1,16 +1,14 @@
 use crate::discovery::{on_discovery_message_received, on_setup_component, sub_default_topic};
 use bevy_app::prelude::*;
-use bevy_ecs::{
-    event::EventReader,
-    prelude::{Component, Resource, Trigger},
-    system::Commands,
-};
+use bevy_ecs::prelude::*;
 use bevy_mqtt::{rumqttc, MqttClientError, MqttConnectError, MqttPlugin, MqttSetting};
+use bevy_reflect::Reflect;
 use bevy_state::app::StatesPlugin;
+use bevy_utils::HashSet;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use skep_core::{constants::Platform, integration::Integration, loader::LoadConfig};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 mod abbreviations;
 mod discovery;
@@ -24,6 +22,8 @@ impl Plugin for SkepMqttPlugin {
         }
 
         app.add_plugins(MqttPlugin)
+            .register_type::<SkepMqttPlatform>()
+            .register_type::<HashSet<(String, String)>>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
@@ -35,25 +35,6 @@ impl Plugin for SkepMqttPlugin {
             )
             .observe(on_load_config)
             .observe(on_setup_component);
-    }
-}
-
-#[derive(Debug, Component)]
-pub struct SkepMqttIntegration {
-    pub name: String,
-}
-
-impl Integration for SkepMqttIntegration {
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-}
-
-impl Default for SkepMqttIntegration {
-    fn default() -> Self {
-        Self {
-            name: "MQTT".to_string(),
-        }
     }
 }
 
@@ -72,12 +53,14 @@ fn handle_error(
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Reflect)]
 pub(crate) struct SkepMqttPlatform {
+    #[reflect(ignore)]
     pub(crate) last_discovery: chrono::DateTime<chrono::Utc>,
     /// default discovery prefix topic: homeassistant
     pub discovery_prefix: String,
     pub discovery_already_discovered: HashSet<(String, String)>,
+    #[reflect(ignore)]
     pub discovery_pending_discovered: HashMap<(String, String), PendingDiscovered>,
     pub platforms_loaded: HashSet<Platform>,
 }
@@ -164,7 +147,7 @@ pub fn on_load_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
                         cap: 20,
                     },
                     SkepMqttPlatform::default(),
-                    SkepMqttIntegration::default(),
+                    Integration::new("MQTT"),
                 ));
             }
         }

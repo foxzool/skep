@@ -9,7 +9,7 @@ license = "Apache-2.0"
 
 [features]
 default = ["gui"]
-gui = ["bevy-inspector-egui"]
+gui = ["bevy-inspector-egui", "bevy"]
 
 [dependencies]
 bevy = { version = "0.14", default-features = false, features = [
@@ -37,7 +37,7 @@ bevy = { version = "0.14", default-features = false, features = [
     "default_font",
     "webgl2",
     "sysinfo_plugin",
-] }
+], optional = true }
 bevy-inspector-egui = { version = "0.26", optional = true }
 skep_core = { path = "crates/skep_core" }
 skep_mqtt = { path = "crates/skep_mqtt" }
@@ -56,11 +56,14 @@ skep_sensor = { path = "crates/skep_sensor" }
 
 
 bevy_app = "0.14.2"
+bevy_core = "0.14.2"
 bevy_log = "0.14.2"
 bevy_ecs = "0.14.2"
 bevy_derive = "0.14.2"
 bevy_hierarchy = "0.14.2"
+bevy_reflect = "0.14.2"
 bevy_state = "0.14.2"
+bevy_utils = "0.14.2"
 
 anyhow = { version = "1.0.44" }
 chrono = "0.4"

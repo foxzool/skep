@@ -1,13 +1,10 @@
-use crate::typing::SetupConfigEvent;
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 
 pub struct SkepEntityPlugin;
 
 impl Plugin for SkepEntityPlugin {
-    fn build(&self, app: &mut App) {
-        app.observe(on_entity_config);
-    }
+    fn build(&self, _app: &mut App) {}
 }
 
 use serde_json::{Map, Value};
@@ -45,5 +42,3 @@ pub struct SkepEntity {
     translation_key: Option<String>,
     translation_placeholders: Option<HashMap<String, String>>,
 }
-
-fn on_entity_config(trigger: Trigger<SetupConfigEvent>) {}

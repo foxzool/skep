@@ -1,9 +1,6 @@
-use bevy_ecs::{component::Component, event::Event, system::Commands};
+use bevy_ecs::{event::Event, system::Commands};
 use log::{debug, error, warn};
 use serde_toml_merge::merge;
-
-use serde::Deserialize;
-use std::collections::HashMap;
 
 #[derive(Event)]
 pub struct LoadConfig {

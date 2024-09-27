@@ -1,5 +1,13 @@
 use bevy_ecs::component::Component;
+use bevy_reflect::Reflect;
 
-pub trait Integration: Component {
-    fn name(&self) -> String;
+#[derive(Debug, Component, Reflect)]
+pub struct Integration {
+    pub name: String,
+}
+
+impl Integration {
+    pub fn new(name: impl ToString) -> Self {
+        Self { name: name.to_string() }
+    }
 }

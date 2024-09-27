@@ -3,11 +3,10 @@ use crate::{
     PendingDiscovered, SkepMqttPlatform,
 };
 use bevy_ecs::prelude::*;
-use bevy_hierarchy::BuildChildren;
-use bevy_log::{debug, trace, warn};
+use bevy_log::{debug, warn};
 use bevy_mqtt::{
     rumqttc::{QoS, SubscribeFilter},
-    MqttClient, MqttClientConnected, MqttPublishPacket, SubscribeTopic, TopicMessage,
+    MqttClient, MqttClientConnected, MqttPublishPacket,
 };
 use regex::{Error, Regex};
 use serde::Deserialize;
@@ -83,7 +82,7 @@ pub struct ProcessDiscoveryPayload {
 pub(crate) fn on_discovery_message_received(
     mut publish_ev: EventReader<MqttPublishPacket>,
     mut query: Query<&mut SkepMqttPlatform>,
-    mut commands: Commands,
+    mut setup_config_event: EventWriter<SetupConfigEvent>,
 ) {
     for packet in publish_ev.read() {
         if let Ok(mut mqtt_platform) = query.get_mut(packet.entity) {
@@ -134,7 +133,7 @@ pub(crate) fn on_discovery_message_received(
                     }
 
                     if !mqtt_platform.platforms_loaded.contains(&component) {
-                        commands.trigger(SetupConfigEvent {
+                        setup_config_event.send(SetupConfigEvent {
                             component,
                             payload: payload.clone(),
                         });
