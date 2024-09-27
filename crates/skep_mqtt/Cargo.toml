@@ -1,0 +1,25 @@
+[package]
+name = "skep_mqtt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+skep_core = { workspace = true }
+skep_sensor = { workspace = true }
+
+anyhow = { workspace = true }
+bevy_app = { workspace = true }
+bevy_log = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_hierarchy = { workspace = true }
+bevy_state = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+
+
+bytes = "1"
+bevy_mqtt = { version = "0.4.1", features = ["websocket"] }
+lazy_static = "1.5.0"
+regex = { version = "1.10.6" }
+log = "0.4.22"

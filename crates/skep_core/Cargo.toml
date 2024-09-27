@@ -1,0 +1,22 @@
+[package]
+name = "skep_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_derive = { workspace = true }
+
+anyhow = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+
+
+toml = { version = "0.8.19" }
+nanoid = "0.4.0"
+serde-toml-merge = { version = "0.3.8" }
