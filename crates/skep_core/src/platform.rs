@@ -1,7 +1,7 @@
 use bevy_ecs::prelude::Component;
 use bevy_reflect::Reflect;
 
-#[derive(Debug, Component, Reflect)]
+#[derive(Debug, Component, Clone, PartialEq, Reflect)]
 pub struct Platform {
     pub name: String,
 }

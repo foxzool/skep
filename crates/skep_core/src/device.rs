@@ -1,7 +1,7 @@
+use crate::{domain::Domain, integration::Integration, platform::Platform};
 use bevy_app::{App, Plugin};
 use bevy_core::Name;
 use bevy_ecs::prelude::*;
-use bevy_hierarchy::BuildChildren;
 use bevy_reflect::Reflect;
 use bevy_utils::{HashMap, HashSet};
 use chrono::Utc;
@@ -12,7 +12,8 @@ pub(crate) struct SkepDevicePlugin;
 
 impl Plugin for SkepDevicePlugin {
     fn build(&self, app: &mut App) {
-        app.observe(device_create_or_update);
+        app.register_type::<DeviceEntry>()
+            .observe(device_create_or_update);
     }
 }
 
@@ -69,7 +70,40 @@ impl Default for DeviceEntry {
     }
 }
 
-impl DeviceEntry {}
+impl DeviceEntry {
+    pub fn device_info(&self) -> DeviceInfo {
+        DeviceInfo {
+            configuration_url: self.configuration_url.clone(),
+            connections: Some(self.connections.clone()),
+            default_manufacturer: self.manufacturer.clone(),
+            default_model: self.model.clone(),
+            default_name: self.name.clone(),
+            entry_type: self.entry_type.clone(),
+            identifiers: Some(self.identifiers.clone()),
+            manufacturer: self.manufacturer.clone(),
+            model: self.model.clone(),
+            model_id: self.model_id.clone(),
+            modified_at: Some(self.modified_at),
+            name: self.name.clone(),
+            serial_number: self.serial_number.clone(),
+            suggested_area: self.suggested_area.clone(),
+            sw_version: self.sw_version.clone(),
+            hw_version: self.hw_version.clone(),
+            labels: Some(self.labels.clone()),
+            translation_key: None,
+            translation_placeholders: None,
+            via_device_id: self.via_device_id.clone(),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        if let Some(name_by_user) = self.name_by_user.as_deref() {
+            name_by_user
+        } else {
+            self.name.as_deref().unwrap_or_default()
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Reflect)]
 pub enum DeviceEntryDisabler {
@@ -107,6 +141,12 @@ pub struct DeviceInfo {
     pub translation_key: Option<String>,
     pub translation_placeholders: Option<HashMap<String, String>>,
     pub via_device_id: Option<String>,
+}
+
+impl PartialEq for DeviceInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.identifiers == other.identifiers || self.connections == other.connections
+    }
 }
 
 fn deserialize_identifiers<'de, D>(deserializer: D) -> Result<Option<HashSet<String>>, D::Error>
@@ -176,15 +216,43 @@ impl From<DeviceInfo> for DeviceEntry {
     }
 }
 
-pub(crate) fn device_create_or_update(trigger: Trigger<DeviceInfo>, mut commands: Commands) {
-    let device_entry = DeviceEntry::from(trigger.event().clone());
-    let device = commands
-        .spawn((
-            Name::new(device_entry.name.clone().unwrap_or_default()),
+pub(crate) fn device_create_or_update(
+    trigger: Trigger<DeviceInfo>,
+    mut commands: Commands,
+    platform_query: Query<(&Integration, &Platform), Without<DeviceEntry>>,
+    full_device_query: Query<(&Integration, &Platform, &DeviceEntry)>,
+    raw_device_query: Query<&DeviceEntry, (Without<Integration>, Without<Platform>)>,
+) {
+    let device_info = trigger.event().clone();
+    let device_entry = DeviceEntry::from(device_info.clone());
+
+    if let Ok((parent_integration, parent_platform)) = platform_query.get(trigger.entity()) {
+        // has integration and platform
+        for (integration, platform, device_entry) in full_device_query.iter() {
+            if parent_integration == integration
+                && parent_platform == platform
+                && device_entry.device_info() == device_info
+            {
+                return;
+            }
+        }
+
+        commands.spawn((
+            Name::new(device_entry.name().to_string()),
             device_entry,
-        ))
-        .id();
-    commands.entity(trigger.entity()).add_child(device);
+            parent_platform.clone(),
+            parent_integration.clone(),
+        ));
+    } else {
+        // no integration and platform
+        for device_entry in raw_device_query.iter() {
+            if device_entry.device_info() == device_info {
+                return;
+            }
+        }
+
+        commands.spawn((Name::new(device_entry.name().to_string()), device_entry));
+    }
 }
 
 #[test]

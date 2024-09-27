@@ -116,7 +116,7 @@ pub(crate) fn on_discovery_message_received(
                         return;
                     }
 
-                    debug!("Process discovery payload {:?}", payload);
+                    trace!("Process discovery payload {:?}", payload);
 
                     let already_discovered = mqtt_platform
                         .discovery_already_discovered
