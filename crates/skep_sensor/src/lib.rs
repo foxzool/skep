@@ -1,17 +1,16 @@
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use chrono::{DateTime, Utc};
+use std::str::FromStr;
 
 mod constant;
 pub use constant::*;
-use skep_core::typing::{SetupConfigEvent, ValueType};
+use skep_core::typing::{SetupConfig, ValueType};
 
 pub struct SkepSensorPlugin;
 
 impl Plugin for SkepSensorPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, setup_event);
-    }
+    fn build(&self, _app: &mut App) {}
 }
 
 #[derive(Debug, Component)]
@@ -27,8 +26,31 @@ pub struct Sensor {
     pub unit_of_measurement: Option<String>,
 }
 
-fn setup_event(mut events: EventReader<SetupConfigEvent>) {
-    for event in events.read() {
-        println!("SetupConfigEvent: {:?}", event);
+impl Sensor {
+    pub fn from_config(event: SetupConfig) -> Sensor {
+        match SensorDeviceClass::from_str(&event.component) {
+            Ok(device_class) => Sensor {
+                device_class: Some(device_class.clone()),
+                last_reset: None,
+                native_unit_of_measurement: device_class.unit_of_measurement(),
+                native_value: None,
+                options: None,
+                state_class: None,
+                suggested_display_precision: None,
+                suggested_unit_of_measurement: None,
+                unit_of_measurement: None,
+            },
+            Err(_) => Sensor {
+                device_class: None,
+                last_reset: None,
+                native_unit_of_measurement: None,
+                native_value: None,
+                options: None,
+                state_class: None,
+                suggested_display_precision: None,
+                suggested_unit_of_measurement: None,
+                unit_of_measurement: None,
+            },
+        }
     }
 }

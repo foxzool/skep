@@ -7,7 +7,7 @@ use bevy_state::app::StatesPlugin;
 use bevy_utils::HashSet;
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use skep_core::{constants::Platform, integration::Integration, loader::LoadConfig};
+use skep_core::{integration::Integration, loader::LoadConfig, platform::Platform};
 use std::collections::{HashMap, VecDeque};
 
 mod abbreviations;
@@ -62,7 +62,7 @@ pub(crate) struct SkepMqttPlatform {
     pub discovery_already_discovered: HashSet<(String, String)>,
     #[reflect(ignore)]
     pub discovery_pending_discovered: HashMap<(String, String), PendingDiscovered>,
-    pub platforms_loaded: HashSet<Platform>,
+    pub platforms_loaded: HashSet<String>,
 }
 
 impl Default for SkepMqttPlatform {
@@ -122,7 +122,7 @@ pub fn on_load_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
             for config_entry in config.mqtt_config_entry {
                 let mut mqtt_options = rumqttc::MqttOptions::new(
                     "skep-client",
-                    config_entry.broker,
+                    &config_entry.broker,
                     config_entry.port,
                 );
                 if let (Some(username), Some(password)) =
@@ -142,12 +142,13 @@ pub fn on_load_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
                 mqtt_options.set_transport(transport);
 
                 commands.spawn((
+                    Integration::new("MQTT"),
+                    Platform::new(format!("{}:{}", config_entry.broker, config_entry.port)),
                     MqttSetting {
                         mqtt_options,
                         cap: 20,
                     },
                     SkepMqttPlatform::default(),
-                    Integration::new("MQTT"),
                 ));
             }
         }

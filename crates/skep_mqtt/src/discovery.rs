@@ -3,19 +3,18 @@ use crate::{
     PendingDiscovered, SkepMqttPlatform,
 };
 use bevy_ecs::prelude::*;
-use bevy_log::{debug, warn};
+use bevy_log::{debug, trace, warn};
 use bevy_mqtt::{
     rumqttc::{QoS, SubscribeFilter},
     MqttClient, MqttClientConnected, MqttPublishPacket,
 };
+use bevy_utils::HashSet;
 use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use skep_core::{constants::Platform, typing::SetupConfigEvent};
-use std::{
-    collections::{HashMap, VecDeque},
-    str::FromStr,
-};
+use skep_core::{device::DeviceInfo, typing::SetupConfig};
+use skep_sensor::Sensor;
+use std::collections::{HashMap, VecDeque};
 
 /// Subscribe to default topic
 pub fn sub_default_topic(
@@ -74,7 +73,7 @@ pub(crate) const SUPPORTED_COMPONENTS: &[&str] = &[
 
 #[derive(Event)]
 pub struct ProcessDiscoveryPayload {
-    pub component: Platform,
+    pub component: String,
     pub object_id: String,
     pub payload: Map<String, Value>,
 }
@@ -82,11 +81,11 @@ pub struct ProcessDiscoveryPayload {
 pub(crate) fn on_discovery_message_received(
     mut publish_ev: EventReader<MqttPublishPacket>,
     mut query: Query<&mut SkepMqttPlatform>,
-    mut setup_config_event: EventWriter<SetupConfigEvent>,
+    mut commands: Commands,
 ) {
     for packet in publish_ev.read() {
         if let Ok(mut mqtt_platform) = query.get_mut(packet.entity) {
-            debug!("topic: {} received : {:?}", packet.topic, packet.payload);
+            trace!("topic: {} received : {:?}", packet.topic, packet.payload);
             mqtt_platform.last_discovery = chrono::Utc::now();
 
             let payload = packet.payload.clone();
@@ -127,16 +126,18 @@ pub(crate) fn on_discovery_message_received(
                             .discovery_pending_discovered
                             .contains_key(&discovery_hash)
                     {
-                        mqtt_platform
-                            .discovery_pending_discovered
-                            .insert(discovery_hash, PendingDiscovered::new(VecDeque::new()));
+                        mqtt_platform.discovery_pending_discovered.insert(
+                            discovery_hash.clone(),
+                            PendingDiscovered::new(VecDeque::new()),
+                        );
                     }
 
                     if !mqtt_platform.platforms_loaded.contains(&component) {
-                        setup_config_event.send(SetupConfigEvent {
-                            component,
-                            payload: payload.clone(),
-                        });
+                        debug!("{:?} waiting setup ", discovery_hash);
+                        if let Some(device_info) = device_info_from_payload(payload.clone()) {
+                            debug!("got device_info {:?}", device_info);
+                            commands.trigger_targets(device_info, vec![packet.entity]);
+                        }
                     }
                 }
                 Ok(None) => {}
@@ -197,7 +198,7 @@ fn handle_discovery_message(
     }
 
     let trigger = ProcessDiscoveryPayload {
-        component: Platform::from_str(&component)?,
+        component,
         object_id: discovery_id.clone(),
         payload: discovery_payload,
     };
@@ -205,7 +206,7 @@ fn handle_discovery_message(
     Ok(Some(trigger))
 }
 
-pub fn on_setup_component(trigger: Trigger<SetupConfigEvent>) {
+pub fn on_setup_component(trigger: Trigger<SetupConfig>) {
     debug!("on_setup_component {:?}", trigger.event());
 }
 
@@ -359,4 +360,30 @@ fn test_replace_base_topic() {
            "state_topic":"homeassistant/switch/irrigation/state"
         })
     );
+}
+
+fn device_info_from_payload(payload: Map<String, Value>) -> Option<DeviceInfo> {
+    if let Some(device_value) = payload.get("device") {
+        let mut device_info = DeviceInfo::default();
+        if let Some(identifiers_list) = device_value.get("identifiers") {
+            let mut identifiers = device_info.identifiers.get_or_insert(HashSet::new());
+            if let Some(identifiers_arr) = identifiers_list.as_array() {
+                for identifier in identifiers_arr {
+                    if let Some(identifier) = identifier.as_str() {
+                        let _ = identifiers.insert(("mqtt".to_string(), identifier.to_string()));
+                    }
+                }
+            }
+
+            if let Some(identifiers_str) = identifiers_list.as_str() {
+                let _ = identifiers.insert(("mqtt".to_string(), identifiers_str.to_string()));
+            }
+        }
+        if let Some(name) = device_value.get("name") {
+            device_info.default_name = Some(name.as_str().unwrap_or_default().to_string());
+        }
+        Some(device_info)
+    } else {
+        None
+    }
 }

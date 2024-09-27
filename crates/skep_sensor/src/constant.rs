@@ -4,7 +4,7 @@ pub const DOMAIN: &str = "sensor";
 
 pub const ENTITY_ID_FORMAT: &str = "sensor.{}";
 
-#[derive(Debug, EnumString, Display, PartialEq)]
+#[derive(Debug, EnumString, Display, PartialEq, Clone, Eq)]
 #[strum(serialize_all = "snake_case")]
 #[strum(ascii_case_insensitive)]
 pub enum SensorDeviceClass {
@@ -70,8 +70,8 @@ pub enum SensorDeviceClass {
 }
 
 impl SensorDeviceClass {
-    pub fn unit_of_measurement(&self) -> Option<&'static str> {
-        match self {
+    pub fn unit_of_measurement(&self) -> Option<String> {
+        let s = match self {
             SensorDeviceClass::Date => None,
             SensorDeviceClass::Enum => None,
             SensorDeviceClass::Timestamp => None,
@@ -124,7 +124,9 @@ impl SensorDeviceClass {
             SensorDeviceClass::Water => Some("m³, L, ft³, CCF, gal"),
             SensorDeviceClass::Weight => Some("MASS_* units"),
             SensorDeviceClass::WindSpeed => Some("SPEED_* units"),
-        }
+        };
+
+        s.map(|v| v.to_string())
     }
 }
 

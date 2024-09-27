@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 skep_core = { path = "../skep_core" }
 
+anyhow = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_app = { workspace = true }
 log = { workspace = true }

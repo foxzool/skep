@@ -1,6 +1,7 @@
 use bevy::{app::ScheduleRunnerPlugin, log::LogPlugin, prelude::*};
 use skep_core::SkepCorePlugin;
 use skep_mqtt::SkepMqttPlugin;
+use skep_sensor::SkepSensorPlugin;
 use std::time::Duration;
 
 fn main() {
@@ -19,6 +20,7 @@ fn main() {
     };
 
     app.add_plugins(SkepCorePlugin)
+        .add_plugins(SkepSensorPlugin)
         .add_plugins(SkepMqttPlugin)
         .run();
 }

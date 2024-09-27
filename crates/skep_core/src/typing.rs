@@ -1,4 +1,3 @@
-use crate::constants::Platform;
 use bevy_ecs::event::Event;
 use chrono::{DateTime, NaiveDate, Utc};
 use serde_json::{Map, Value};
@@ -14,8 +13,8 @@ pub enum ValueType {
 
 pub type ConfigType = Map<String, Value>;
 
-#[derive(Event, Debug)]
-pub struct SetupConfigEvent {
-    pub component: Platform,
+#[derive(Event, Debug, Clone)]
+pub struct SetupConfig {
+    pub component: String,
     pub payload: Map<String, Value>,
 }
