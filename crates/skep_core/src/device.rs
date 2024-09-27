@@ -1,9 +1,9 @@
-use crate::{domain::Domain, integration::Integration, platform::Platform};
+use crate::{integration::Integration, platform::Platform};
 use bevy_app::{App, Plugin};
 use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
-use bevy_utils::{HashMap, HashSet};
+use bevy_utils::{tracing::debug, HashMap, HashSet};
 use chrono::Utc;
 use serde::{Deserialize, Deserializer};
 use uuid::Uuid;
@@ -71,6 +71,23 @@ impl Default for DeviceEntry {
 }
 
 impl DeviceEntry {
+    pub fn update_from_device_info(&mut self, device_info: DeviceInfo) {
+        self.configuration_url = device_info.configuration_url;
+        self.connections = device_info.connections.unwrap_or_default();
+        self.entry_type = device_info.entry_type;
+        self.hw_version = device_info.hw_version;
+        self.identifiers = device_info.identifiers.unwrap_or_default();
+        self.labels = device_info.labels.unwrap_or_default();
+        self.manufacturer = device_info.manufacturer;
+        self.model = device_info.model;
+        self.model_id = device_info.model_id;
+        self.modified_at = device_info.modified_at.unwrap_or_default();
+        self.name = device_info.name;
+        self.serial_number = device_info.serial_number;
+        self.suggested_area = device_info.suggested_area;
+        self.sw_version = device_info.sw_version;
+        self.via_device_id = device_info.via_device_id;
+    }
     pub fn device_info(&self) -> DeviceInfo {
         DeviceInfo {
             configuration_url: self.configuration_url.clone(),
@@ -220,19 +237,21 @@ pub(crate) fn device_create_or_update(
     trigger: Trigger<DeviceInfo>,
     mut commands: Commands,
     platform_query: Query<(&Integration, &Platform), Without<DeviceEntry>>,
-    full_device_query: Query<(&Integration, &Platform, &DeviceEntry)>,
-    raw_device_query: Query<&DeviceEntry, (Without<Integration>, Without<Platform>)>,
+    mut full_device_query: Query<(&Integration, &Platform, &mut DeviceEntry)>,
+    mut raw_device_query: Query<&mut DeviceEntry, (Without<Integration>, Without<Platform>)>,
 ) {
     let device_info = trigger.event().clone();
-    let device_entry = DeviceEntry::from(device_info.clone());
 
+    let device_entry = DeviceEntry::from(device_info.clone());
+    debug!("spawn device_entry {:?}", device_entry);
     if let Ok((parent_integration, parent_platform)) = platform_query.get(trigger.entity()) {
         // has integration and platform
-        for (integration, platform, device_entry) in full_device_query.iter() {
+        for (integration, platform, mut device_entry) in full_device_query.iter_mut() {
             if parent_integration == integration
                 && parent_platform == platform
                 && device_entry.device_info() == device_info
             {
+                device_entry.update_from_device_info(device_info);
                 return;
             }
         }
@@ -245,8 +264,9 @@ pub(crate) fn device_create_or_update(
         ));
     } else {
         // no integration and platform
-        for device_entry in raw_device_query.iter() {
+        for mut device_entry in raw_device_query.iter_mut() {
             if device_entry.device_info() == device_info {
+                device_entry.update_from_device_info(device_info);
                 return;
             }
         }

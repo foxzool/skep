@@ -14,7 +14,8 @@ pub enum ValueType {
 pub type ConfigType = Map<String, Value>;
 
 #[derive(Event, Debug, Clone)]
-pub struct SetupConfig {
+pub struct SetupConfigEvent {
     pub component: String,
-    pub payload: Map<String, Value>,
+    pub object_id: String,
+    pub payload: Value,
 }

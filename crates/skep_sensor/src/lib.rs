@@ -1,16 +1,22 @@
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use chrono::{DateTime, Utc};
+use log::debug;
 use std::str::FromStr;
 
 mod constant;
 pub use constant::*;
-use skep_core::typing::{SetupConfig, ValueType};
+use skep_core::{
+    device::DeviceEntry,
+    typing::{SetupConfigEvent, ValueType},
+};
 
 pub struct SkepSensorPlugin;
 
 impl Plugin for SkepSensorPlugin {
-    fn build(&self, _app: &mut App) {}
+    fn build(&self, app: &mut App) {
+        app.observe(create_or_update);
+    }
 }
 
 #[derive(Debug, Component)]
@@ -27,7 +33,7 @@ pub struct Sensor {
 }
 
 impl Sensor {
-    pub fn from_config(event: SetupConfig) -> Sensor {
+    pub fn from_config(event: SetupConfigEvent) -> Sensor {
         match SensorDeviceClass::from_str(&event.component) {
             Ok(device_class) => Sensor {
                 device_class: Some(device_class.clone()),
@@ -52,5 +58,12 @@ impl Sensor {
                 unit_of_measurement: None,
             },
         }
+    }
+}
+
+fn create_or_update(trigger: Trigger<SetupConfigEvent>, device_query: Query<&DeviceEntry>) {
+    debug!("sensor create_or_update {:?}", trigger.event());
+    for device in device_query.iter() {
+        println!("device: {}", device.name());
     }
 }

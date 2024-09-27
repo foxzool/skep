@@ -13,7 +13,7 @@ use bevy_mqtt::{
 use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use skep_core::{device::DeviceInfo, typing::SetupConfig};
+use skep_core::{device::DeviceInfo, typing::SetupConfigEvent};
 use std::collections::{HashMap, VecDeque};
 
 /// Subscribe to default topic
@@ -101,7 +101,7 @@ pub(crate) fn on_discovery_message_received(
                         component,
                         object_id: discovery_id,
                         payload,
-                    } = event;
+                    } = &event;
                     let discovery_hash = (component.to_string(), discovery_id.to_string());
 
                     if let Some(pending) = mqtt_platform
@@ -132,12 +132,20 @@ pub(crate) fn on_discovery_message_received(
                         );
                     }
 
-                    if !mqtt_platform.platforms_loaded.contains(&component) {
+                    if !mqtt_platform.platforms_loaded.contains(component) {
                         // debug!("{:?} waiting setup ", discovery_hash);
                         if let Ok(Some(device_info)) = device_info_from_payload(payload.clone()) {
-                            debug!("got device_info {:?}", device_info);
                             commands.trigger_targets(device_info, vec![packet.entity]);
                         }
+
+                        commands.trigger_targets(
+                            SetupConfigEvent {
+                                component: event.component,
+                                object_id: event.object_id,
+                                payload: event.payload.into(),
+                            },
+                            vec![packet.entity],
+                        );
                     }
                 }
                 Ok(None) => {}
@@ -206,7 +214,7 @@ fn handle_discovery_message(
     Ok(Some(trigger))
 }
 
-pub fn on_setup_component(trigger: Trigger<SetupConfig>) {
+pub fn on_setup_component(trigger: Trigger<SetupConfigEvent>) {
     debug!("on_setup_component {:?}", trigger.event());
 }
 

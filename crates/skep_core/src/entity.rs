@@ -6,6 +6,8 @@ impl Plugin for SkepEntityPlugin {
     fn build(&self, _app: &mut App) {}
 }
 
+use bevy_ecs::component::Component;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -22,4 +24,9 @@ pub struct EntityDescription {
     pub translation_key: Option<String>,
     pub translation_placeholders: Option<HashMap<String, String>>,
     pub unit_of_measurement: Option<String>,
+}
+
+#[derive(Component, Debug)]
+pub struct SkepEntity {
+    extra_state_attributes: Option<Map<String, Value>>,
 }
