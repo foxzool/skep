@@ -2,18 +2,18 @@ use crate::{
     abbreviations::{ABBREVIATIONS, DEVICE_ABBREVIATIONS, ORIGIN_ABBREVIATIONS},
     PendingDiscovered, SkepMqttPlatform,
 };
+use anyhow::Context;
 use bevy_ecs::prelude::*;
 use bevy_log::{debug, trace, warn};
 use bevy_mqtt::{
     rumqttc::{QoS, SubscribeFilter},
     MqttClient, MqttClientConnected, MqttPublishPacket,
 };
-use bevy_utils::HashSet;
+
 use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use skep_core::{device::DeviceInfo, typing::SetupConfig};
-use skep_sensor::Sensor;
 use std::collections::{HashMap, VecDeque};
 
 /// Subscribe to default topic
@@ -133,8 +133,8 @@ pub(crate) fn on_discovery_message_received(
                     }
 
                     if !mqtt_platform.platforms_loaded.contains(&component) {
-                        debug!("{:?} waiting setup ", discovery_hash);
-                        if let Some(device_info) = device_info_from_payload(payload.clone()) {
+                        // debug!("{:?} waiting setup ", discovery_hash);
+                        if let Ok(Some(device_info)) = device_info_from_payload(payload.clone()) {
                             debug!("got device_info {:?}", device_info);
                             commands.trigger_targets(device_info, vec![packet.entity]);
                         }
@@ -362,28 +362,10 @@ fn test_replace_base_topic() {
     );
 }
 
-fn device_info_from_payload(payload: Map<String, Value>) -> Option<DeviceInfo> {
-    if let Some(device_value) = payload.get("device") {
-        let mut device_info = DeviceInfo::default();
-        if let Some(identifiers_list) = device_value.get("identifiers") {
-            let mut identifiers = device_info.identifiers.get_or_insert(HashSet::new());
-            if let Some(identifiers_arr) = identifiers_list.as_array() {
-                for identifier in identifiers_arr {
-                    if let Some(identifier) = identifier.as_str() {
-                        let _ = identifiers.insert(("mqtt".to_string(), identifier.to_string()));
-                    }
-                }
-            }
-
-            if let Some(identifiers_str) = identifiers_list.as_str() {
-                let _ = identifiers.insert(("mqtt".to_string(), identifiers_str.to_string()));
-            }
-        }
-        if let Some(name) = device_value.get("name") {
-            device_info.default_name = Some(name.as_str().unwrap_or_default().to_string());
-        }
-        Some(device_info)
-    } else {
-        None
+fn device_info_from_payload(payload: Map<String, Value>) -> anyhow::Result<Option<DeviceInfo>> {
+    match payload.get("device").cloned() {
+        None => Ok(None),
+        Some(device_value) => serde_json::from_value(device_value)
+            .with_context(|| "Failed to deserialize device info"),
     }
 }

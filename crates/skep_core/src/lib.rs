@@ -1,6 +1,5 @@
 use crate::{
-    device::device_create_or_update, integration::Integration, loader::load_config_toml,
-    platform::Platform,
+    device::DeviceEntry, integration::Integration, loader::load_config_toml, platform::Platform,
 };
 use bevy_app::{App, Plugin, Startup};
 
@@ -17,11 +16,11 @@ pub struct SkepCorePlugin;
 
 impl Plugin for SkepCorePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(entity::SkepEntityPlugin)
+        app.add_plugins((entity::SkepEntityPlugin, device::SkepDevicePlugin))
             .register_type::<Integration>()
             .register_type::<Platform>()
+            .register_type::<DeviceEntry>()
             // .register_type::<DeviceEntry>()
-            .add_systems(Startup, load_config_toml)
-            .observe(device_create_or_update);
+            .add_systems(Startup, load_config_toml);
     }
 }

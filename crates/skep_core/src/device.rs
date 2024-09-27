@@ -1,26 +1,38 @@
-use crate::typing::SetupConfig;
+use bevy_app::{App, Plugin};
+use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use bevy_hierarchy::BuildChildren;
+use bevy_reflect::Reflect;
 use bevy_utils::{HashMap, HashSet};
 use chrono::Utc;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use uuid::Uuid;
 
-#[derive(Debug, Component)]
+pub(crate) struct SkepDevicePlugin;
+
+impl Plugin for SkepDevicePlugin {
+    fn build(&self, app: &mut App) {
+        app.observe(device_create_or_update);
+    }
+}
+
+#[derive(Debug, Component, Reflect)]
 pub struct DeviceEntry {
     pub area_id: Option<String>,
     pub configuration_url: Option<String>,
+    #[reflect(ignore)]
     pub created_at: chrono::DateTime<Utc>,
     pub connections: HashSet<(String, String)>,
     pub disabled_by: Option<DeviceEntryDisabler>,
     pub entry_type: Option<DeviceEntryType>,
     pub hw_version: Option<String>,
     pub id: String,
-    pub identifiers: HashSet<(String, String)>,
+    pub identifiers: HashSet<String>,
     pub labels: HashSet<String>,
     pub manufacturer: Option<String>,
     pub model: Option<String>,
     pub model_id: Option<String>,
+    #[reflect(ignore)]
     pub modified_at: chrono::DateTime<Utc>,
     pub name_by_user: Option<String>,
     pub name: Option<String>,
@@ -57,40 +69,16 @@ impl Default for DeviceEntry {
     }
 }
 
-impl DeviceEntry {
-    pub fn from_config(event: SetupConfig) -> Option<DeviceEntry> {
-        if let Some(device_value) = event.payload.get("device") {
-            let mut device_entry = DeviceEntry::default();
-            if let Some(identifiers) = device_value.get("identifiers") {
-                if let Some(identifiers) = identifiers.as_array() {
-                    for identifier in identifiers {
-                        if let Some(identifier) = identifier.as_str() {
-                            device_entry
-                                .identifiers
-                                .insert((identifier.to_string(), "".to_string()));
-                        }
-                    }
-                }
-            }
-            if let Some(name) = device_value.get("name") {
-                device_entry.name = Some(name.as_str().unwrap_or_default().to_string());
-            }
+impl DeviceEntry {}
 
-            Some(device_entry)
-        } else {
-            None
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Reflect)]
 pub enum DeviceEntryDisabler {
     ConfigEntry,
     Integration,
     User,
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Deserialize, Reflect)]
 pub enum DeviceEntryType {
     #[default]
     Service,
@@ -104,7 +92,8 @@ pub struct DeviceInfo {
     pub default_model: Option<String>,
     pub default_name: Option<String>,
     pub entry_type: Option<DeviceEntryType>,
-    pub identifiers: Option<HashSet<(String, String)>>,
+    #[serde(deserialize_with = "deserialize_identifiers")]
+    pub identifiers: Option<HashSet<String>>,
     pub manufacturer: Option<String>,
     pub model: Option<String>,
     pub model_id: Option<String>,
@@ -118,6 +107,35 @@ pub struct DeviceInfo {
     pub translation_key: Option<String>,
     pub translation_placeholders: Option<HashMap<String, String>>,
     pub via_device_id: Option<String>,
+}
+
+fn deserialize_identifiers<'de, D>(deserializer: D) -> Result<Option<HashSet<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrSet {
+        String(String),
+        HashSet(HashSet<String>),
+        Null,
+    }
+
+    match StringOrSet::deserialize(deserializer)? {
+        StringOrSet::String(s) => {
+            let mut set = HashSet::new();
+            set.insert(s);
+            Ok(Some(set))
+        }
+        StringOrSet::HashSet(set) => {
+            if set.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(set))
+            }
+        }
+        StringOrSet::Null => Ok(None),
+    }
 }
 
 impl DeviceInfo {
@@ -159,16 +177,19 @@ impl From<DeviceInfo> for DeviceEntry {
 }
 
 pub(crate) fn device_create_or_update(trigger: Trigger<DeviceInfo>, mut commands: Commands) {
-    println!("{:?}, {:?}", trigger.entity(), trigger.event());
+    let device_entry = DeviceEntry::from(trigger.event().clone());
     let device = commands
-        .spawn(DeviceEntry::from(trigger.event().clone()))
+        .spawn((
+            Name::new(device_entry.name.clone().unwrap_or_default()),
+            device_entry,
+        ))
         .id();
     commands.entity(trigger.entity()).add_child(device);
 }
 
 #[test]
 fn test_device_info() {
-    let device_json = json!(
+    let device_json = serde_json::json!(
         {
             "identifiers":[
                ("sensor",  "01ad")
