@@ -7,7 +7,7 @@ use skep_core::{
     config_entry::ConfigEntry,
     constants::{CONF_DEVICE, CONF_ENTITY_CATEGORY, CONF_ICON, CONF_NAME, CONF_UNIQUE_ID},
     device::DeviceInfo,
-    entity::{EntityCategory, SkipEntity},
+    entity::{generate_entity_id, EntityCategory, SkipEntity},
     typing::ConfigType,
 };
 use std::str::FromStr;
@@ -48,6 +48,7 @@ impl SkipEntity for MqttEntity {
 
 #[derive(Debug, Default)]
 pub struct MqttEntity {
+    entity_id: Option<String>,
     device_specifications: Option<HashMap<String, Value>>,
     config: ConfigType,
     unique_id: Option<String>,
@@ -120,6 +121,14 @@ name must be included in each entity's device configuration",
                     config
                 );
             }
+        }
+    }
+
+    fn init_entity_id(&mut self) {}
+
+    pub fn init_entity_id_from_config(&mut self, config: &ConfigType, entity_id_format: &str) {
+        if let Some(object_id) = config.get("object_id") {
+            // self.entity_id = generate_entity_id(entity_id_format, object_id, None);
         }
     }
 }

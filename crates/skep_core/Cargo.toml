@@ -23,5 +23,7 @@ strum_macros = { workspace = true }
 either = "1.13"
 toml = { version = "0.8.19" }
 uuid = { version = "1.10", features = ["v4", "fast-rng", "macro-diagnostics", ] }
+slugify = "0.1.0"
+dyn-fmt = "0.4.3"
 serde-toml-merge = { version = "0.3.8" }
 serde-aux = { version = "4.5" }

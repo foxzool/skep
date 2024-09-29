@@ -1,3 +1,5 @@
+pub const DEVICE_DEFAULT_NAME: &str = "Unnamed Device";
+
 pub const CONF_ABOVE: &str = "above";
 pub const CONF_ACCESS_TOKEN: &str = "access_token";
 pub const CONF_ACTION: &str = "action";
