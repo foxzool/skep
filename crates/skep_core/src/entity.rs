@@ -7,6 +7,7 @@ impl Plugin for SkepEntityPlugin {
 }
 
 use crate::{constants::STATE_UNKNOWN, device::DeviceInfo, typing::StateType};
+use either::Either;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -97,7 +98,7 @@ pub trait SkipEntity {
     }
 
     fn state(&self) -> StateType {
-        STATE_UNKNOWN.into()
+        Some(Either::Left(STATE_UNKNOWN.to_string()))
     }
 
     fn supported_features(&self) -> Option<i32> {

@@ -39,7 +39,8 @@ impl Sensor {
             return Err(anyhow::anyhow!("Invalid component"));
         }
         let mut sensor = Sensor::default();
-        sensor.device_class = SensorDeviceClass::from_str(&event.payload.get("device_class")?).ok();
+        // sensor.device_class =
+        // SensorDeviceClass::from_str(&event.payload.get("device_class")?).ok();
         Ok(sensor)
     }
 }

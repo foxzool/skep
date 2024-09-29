@@ -1,6 +1,5 @@
 use crate::{
-    domain::Domain, integration::Integration, loader::load_config_toml,
-    platform::Platform,
+    domain::Domain, integration::Integration, loader::load_config_toml, platform::Platform,
 };
 use bevy_app::{App, Plugin, Startup};
 
@@ -13,6 +12,8 @@ pub mod integration;
 pub mod loader;
 pub mod platform;
 pub mod typing;
+
+pub mod helper;
 
 pub struct SkepCorePlugin;
 

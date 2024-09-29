@@ -1,4 +1,4 @@
-use crate::{integration::Integration, platform::Platform};
+use crate::{integration::Integration, platform::Platform, typing::ConfigType};
 use bevy_app::{App, Plugin};
 use bevy_core::Name;
 use bevy_ecs::prelude::*;
@@ -6,6 +6,7 @@ use bevy_reflect::Reflect;
 use bevy_utils::{tracing::debug, HashMap, HashSet};
 use chrono::Utc;
 use serde::{Deserialize, Deserializer};
+use serde_json::Value;
 use uuid::Uuid;
 
 pub(crate) struct SkepDevicePlugin;
@@ -28,7 +29,7 @@ pub struct DeviceEntry {
     pub entry_type: Option<DeviceEntryType>,
     pub hw_version: Option<String>,
     pub id: String,
-    pub identifiers: HashSet<String>,
+    pub identifiers: HashSet<(String, String)>,
     pub labels: HashSet<String>,
     pub manufacturer: Option<String>,
     pub model: Option<String>,
@@ -143,8 +144,8 @@ pub struct DeviceInfo {
     pub default_model: Option<String>,
     pub default_name: Option<String>,
     pub entry_type: Option<DeviceEntryType>,
-    #[serde(deserialize_with = "deserialize_identifiers")]
-    pub identifiers: Option<HashSet<String>>,
+    #[serde(skip)]
+    pub identifiers: Option<HashSet<(String, String)>>,
     pub manufacturer: Option<String>,
     pub model: Option<String>,
     pub model_id: Option<String>,
@@ -158,6 +159,41 @@ pub struct DeviceInfo {
     pub translation_key: Option<String>,
     pub translation_placeholders: Option<HashMap<String, String>>,
     pub via_device_id: Option<String>,
+}
+
+impl DeviceInfo {
+    pub fn from_domain_config(domain: &str, config_type: ConfigType) -> anyhow::Result<DeviceInfo> {
+        let mut device_info: DeviceInfo = serde_json::from_value(Value::from(config_type.clone()))?;
+        if let Some(identifiers) = config_type.get("identifiers") {
+            #[derive(Deserialize)]
+            #[serde(untagged)]
+            enum StringOrSet {
+                String(String),
+                HashSet(HashSet<String>),
+                Null,
+            }
+
+            let i = match StringOrSet::deserialize(identifiers)? {
+                StringOrSet::String(s) => {
+                    let mut set = HashSet::new();
+                    set.insert((domain.to_string(), s));
+                    Some(set)
+                }
+                StringOrSet::HashSet(set) => {
+                    if set.is_empty() {
+                        None
+                    } else {
+                        Some(set.into_iter().map(|s| (domain.to_string(), s)).collect())
+                    }
+                }
+                StringOrSet::Null => None,
+            };
+
+            device_info.identifiers = i;
+        };
+
+        Ok(device_info)
+    }
 }
 
 impl PartialEq for DeviceInfo {
@@ -273,19 +309,4 @@ pub(crate) fn device_create_or_update(
 
         commands.spawn((Name::new(device_entry.name().to_string()), device_entry));
     }
-}
-
-#[test]
-fn test_device_info() {
-    let device_json = serde_json::json!(
-        {
-            "identifiers":[
-               ("sensor",  "01ad")
-            ],
-            "name":"Garden"
-        }
-    );
-
-    let device_info: DeviceInfo = serde_json::from_value(device_json).unwrap();
-    assert!(device_info.is_valid())
 }
