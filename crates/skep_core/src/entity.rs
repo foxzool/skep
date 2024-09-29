@@ -10,8 +10,12 @@ use crate::{constants::STATE_UNKNOWN, device::DeviceInfo, typing::StateType};
 use either::Either;
 use serde_json::Value;
 use std::collections::HashMap;
+use strum_macros::{Display, EnumString};
 
-enum EntityCategory {
+#[derive(Debug, EnumString, Display, Clone)]
+#[strum(serialize_all = "snake_case")]
+#[strum(ascii_case_insensitive)]
+pub enum EntityCategory {
     Config,
     Diagnostic,
 }
@@ -119,5 +123,9 @@ pub trait SkipEntity {
 
     fn unit_of_measurement(&self) -> Option<String> {
         None
+    }
+
+    fn default_to_device_class_name(&self) -> bool {
+        false
     }
 }

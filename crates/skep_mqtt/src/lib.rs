@@ -11,6 +11,7 @@ use skep_core::{integration::Integration, loader::LoadConfig, platform::Platform
 use std::collections::{HashMap, VecDeque};
 
 mod abbreviations;
+mod constants;
 mod discovery;
 mod entity;
 mod subscription;
