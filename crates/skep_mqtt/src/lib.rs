@@ -12,6 +12,7 @@ use std::collections::{HashMap, VecDeque};
 
 mod abbreviations;
 mod discovery;
+mod entity;
 
 pub struct SkepMqttPlugin;
 

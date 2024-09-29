@@ -6,9 +6,14 @@ impl Plugin for SkepEntityPlugin {
     fn build(&self, _app: &mut App) {}
 }
 
-use bevy_ecs::component::Component;
-use serde_json::{Map, Value};
+use crate::{constants::STATE_UNKNOWN, device::DeviceInfo, typing::StateType};
+use serde_json::Value;
 use std::collections::HashMap;
+
+enum EntityCategory {
+    Config,
+    Diagnostic,
+}
 
 #[derive(Debug, Clone)]
 pub struct EntityDescription {
@@ -26,7 +31,92 @@ pub struct EntityDescription {
     pub unit_of_measurement: Option<String>,
 }
 
-#[derive(Component, Debug)]
-pub struct SkepEntity {
-    extra_state_attributes: Option<Map<String, Value>>,
+pub trait SkipEntity {
+    fn assumed_state(&self) -> bool {
+        true
+    }
+
+    fn attribution(&self) -> Option<String> {
+        None
+    }
+
+    fn available(&self) -> bool {
+        true
+    }
+
+    fn capability_attributes(&self) -> Option<HashMap<String, Value>> {
+        None
+    }
+
+    fn device_class(&self) -> Option<String> {
+        None
+    }
+
+    fn device_info(&self) -> Option<DeviceInfo> {
+        None
+    }
+
+    fn entity_category(&self) -> Option<EntityCategory> {
+        None
+    }
+
+    fn has_entity_name(&self) -> bool {
+        false
+    }
+
+    fn entity_picture(&self) -> Option<String> {
+        None
+    }
+
+    fn entity_registry_enabled_default(&self) -> bool {
+        true
+    }
+
+    fn entity_registry_visible_default(&self) -> bool {
+        true
+    }
+
+    fn extra_state_attributes(&self) -> Option<HashMap<String, Value>> {
+        None
+    }
+
+    fn force_update(&self) -> bool {
+        false
+    }
+
+    fn icon(&self) -> Option<String> {
+        None
+    }
+
+    fn name(&self) -> Option<String> {
+        None
+    }
+
+    fn should_poll(&self) -> bool {
+        true
+    }
+
+    fn state(&self) -> StateType {
+        STATE_UNKNOWN.into()
+    }
+
+    fn supported_features(&self) -> Option<i32> {
+        None
+    }
+
+    fn translation_key(&self) -> Option<String> {
+        None
+    }
+
+    fn translation_placeholders(&self) -> Option<HashMap<String, String>> {
+        None
+    }
+
+    fn unique_id(&self) -> Option<String> {
+        None
+    }
+
+    fn unit_of_measurement(&self) -> Option<String> {
+        None
+    }
 }

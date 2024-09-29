@@ -1,5 +1,6 @@
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
+use bevy_hierarchy::BuildChildren;
 use chrono::{DateTime, Utc};
 use log::debug;
 use std::str::FromStr;
@@ -19,7 +20,7 @@ impl Plugin for SkepSensorPlugin {
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Default)]
 pub struct Sensor {
     pub device_class: Option<SensorDeviceClass>,
     pub last_reset: Option<DateTime<Utc>>,
@@ -33,37 +34,26 @@ pub struct Sensor {
 }
 
 impl Sensor {
-    pub fn from_config(event: SetupConfigEvent) -> Sensor {
-        match SensorDeviceClass::from_str(&event.component) {
-            Ok(device_class) => Sensor {
-                device_class: Some(device_class.clone()),
-                last_reset: None,
-                native_unit_of_measurement: device_class.unit_of_measurement(),
-                native_value: None,
-                options: None,
-                state_class: None,
-                suggested_display_precision: None,
-                suggested_unit_of_measurement: None,
-                unit_of_measurement: None,
-            },
-            Err(_) => Sensor {
-                device_class: None,
-                last_reset: None,
-                native_unit_of_measurement: None,
-                native_value: None,
-                options: None,
-                state_class: None,
-                suggested_display_precision: None,
-                suggested_unit_of_measurement: None,
-                unit_of_measurement: None,
-            },
+    pub fn from_config(event: SetupConfigEvent) -> anyhow::Result<Sensor> {
+        if event.component != "sensor" {
+            return Err(anyhow::anyhow!("Invalid component"));
         }
+        let mut sensor = Sensor::default();
+        sensor.device_class = SensorDeviceClass::from_str(&event.payload.get("device_class")?).ok();
+        Ok(sensor)
     }
 }
 
-fn create_or_update(trigger: Trigger<SetupConfigEvent>, device_query: Query<&DeviceEntry>) {
-    debug!("sensor create_or_update {:?}", trigger.event());
-    for device in device_query.iter() {
-        println!("device: {}", device.name());
+fn create_or_update(
+    trigger: Trigger<SetupConfigEvent>,
+    device_query: Query<&DeviceEntry>,
+    mut commands: Commands,
+) {
+    if let Ok(sensor) = Sensor::from_config(trigger.event().clone()) {
+        debug!("sensor create_or_update {:?}", sensor);
+        let sensor_entity = commands.spawn_empty().insert(sensor).id();
+        if let Ok(_device) = device_query.get(trigger.entity()) {
+            commands.entity(trigger.entity()).add_child(sensor_entity);
+        }
     }
 }

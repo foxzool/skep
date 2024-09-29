@@ -1,6 +1,9 @@
 use bevy_ecs::event::Event;
 use chrono::{DateTime, NaiveDate, Utc};
+use either::Either;
 use serde_json::{Map, Value};
+
+pub type StateType = Option<Either<String, Either<i32, f64>>>;
 
 #[derive(Debug)]
 pub enum ValueType {

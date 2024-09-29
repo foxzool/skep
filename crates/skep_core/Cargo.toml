@@ -20,7 +20,7 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 
-
+either = "1.13"
 toml = { version = "0.8.19" }
 uuid = { version = "1.10", features = ["v4", "fast-rng", "macro-diagnostics", ] }
 serde-toml-merge = { version = "0.3.8" }
