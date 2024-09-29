@@ -13,6 +13,9 @@ use std::collections::{HashMap, VecDeque};
 mod abbreviations;
 mod discovery;
 mod entity;
+mod subscription;
+
+type DiscoveryInfoType = Map<String, Value>;
 
 pub struct SkepMqttPlugin;
 
