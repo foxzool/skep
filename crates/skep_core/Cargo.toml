@@ -11,6 +11,7 @@ bevy_derive = { workspace = true }
 bevy_hierarchy = { workspace = true }
 bevy_reflect = { workspace = true }
 bevy_utils = { workspace = true }
+bevy_time = { workspace = true }
 
 anyhow = { workspace = true }
 chrono = { workspace = true }

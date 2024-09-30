@@ -1,11 +1,13 @@
 use crate::{
-    entity::{MqttAttributesMixin, MqttDiscoveryUpdateMixin, MqttEntity, MqttEntityDeviceInfo},
+    entity::{MqttAttributesMixin, MqttDiscoveryUpdateMixin, MqttEntity, MqttEntityDeviceInfo}
+    ,
     subscription::EntitySubscription,
     DiscoveryInfoType,
 };
 use bevy_app::{App, Plugin};
 use bevy_ecs::{component::Component, observer::Trigger};
 use bevy_utils::HashMap;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 use skep_core::{
     config_entry::ConfigEntry,
@@ -16,6 +18,21 @@ use skep_core::{
     },
     typing::{ConfigType, SetupConfigEntry, StateType},
 };
+use skep_sensor::ENTITY_ID_FORMAT;
+
+use bevy_ecs::world::CommandQueue;
+use bytes::Bytes;
+use lazy_static::lazy_static;
+use std::collections::HashSet;
+
+lazy_static! {
+    static ref MQTT_SENSOR_ATTRIBUTES_BLOCKED: HashSet<&'static str> = {
+        let mut set = HashSet::new();
+        set.insert(skep_sensor::ATTR_LAST_RESET);
+        set.insert(skep_sensor::ATTR_STATE_CLASS);
+        set
+    };
+}
 
 pub struct MqttSensorPlugin;
 
@@ -25,7 +42,7 @@ impl Plugin for MqttSensorPlugin {
     }
 }
 
-#[derive(Debug, Component, Default)]
+#[derive(Debug, Component)]
 pub struct MqttSensorComponent {
     entity_id: Option<String>,
     entity_description: EntityDescription,
@@ -53,9 +70,35 @@ pub struct MqttSensorComponent {
     unit_of_measurement: Option<String>,
 
     config: ConfigType,
+    default_name: Option<String>,
     discovery: Option<DiscoveryInfoType>,
     subscriptions: HashMap<String, HashMap<String, Value>>,
+    entity_id_format: String,
+    last_rest: Option<DateTime<Utc>>,
+    extra_blocked: HashSet<&'static str>,
+    expiration_trigger: Option<CommandQueue>,
+    expire_after: Option<i32>,
+    expired: Option<bool>,
+    // template: Option<Arc<Mutex<dyn Fn(ReceivePayloadType, PayloadSentinel) ->
+    // ReceivePayloadType>>>, last_reset_template: Option<Box<dyn Fn(ReceivePayloadType) ->
+    // ReceivePayloadType>>,
 }
+
+type ReceivePayloadType = Bytes;
+
+impl Default for MqttSensorComponent {
+    fn default() -> Self {
+        MqttSensorComponent {
+            default_name: Some(DEFAULT_NAME.to_string()),
+            entity_id_format: ENTITY_ID_FORMAT.to_string(),
+            extra_blocked: MQTT_SENSOR_ATTRIBUTES_BLOCKED.to_owned(),
+            ..Default::default()
+        }
+    }
+}
+
+const DEFAULT_NAME: &str = "MQTT Sensor";
+const DEFAULT_FORCE_UPDATE: bool = false;
 
 impl MqttAttributesMixin for MqttSensorComponent {
     fn new(&mut self, config: ConfigType) {

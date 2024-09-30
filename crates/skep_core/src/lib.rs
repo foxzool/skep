@@ -1,5 +1,7 @@
 use crate::{
-    domain::Domain, integration::Integration, loader::load_config_toml, platform::Platform,
+    device::SkepDevicePlugin, domain::Domain, entity::SkepEntityPlugin,
+    helper::event::SkepCoreEventPlugin, integration::Integration, loader::load_config_toml,
+    platform::Platform,
 };
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::system::Resource;
@@ -22,7 +24,7 @@ pub struct SkepCorePlugin;
 
 impl Plugin for SkepCorePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((entity::SkepEntityPlugin, device::SkepDevicePlugin))
+        app.add_plugins((SkepEntityPlugin, SkepDevicePlugin, SkepCoreEventPlugin))
             .register_type::<Integration>()
             .register_type::<Platform>()
             .register_type::<Domain>()

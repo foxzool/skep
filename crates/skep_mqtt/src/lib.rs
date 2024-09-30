@@ -22,6 +22,7 @@ mod binary_sensor;
 mod constants;
 mod discovery;
 mod entity;
+mod models;
 mod sensor;
 mod subscription;
 

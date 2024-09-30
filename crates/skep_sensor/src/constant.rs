@@ -3,6 +3,12 @@ use strum_macros::{Display, EnumString};
 
 pub const DOMAIN: &str = "sensor";
 
+pub const CONF_STATE_CLASS: &str = "state_class";
+
+pub const ATTR_LAST_RESET: &str = "last_reset";
+pub const ATTR_STATE_CLASS: &str = "state_class";
+pub const ATTR_OPTIONS: &str = "options";
+
 pub const ENTITY_ID_FORMAT: &str = "sensor.{}";
 
 #[derive(Debug, EnumString, Display, PartialEq, Clone, Eq, Reflect)]

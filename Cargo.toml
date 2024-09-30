@@ -64,6 +64,7 @@ bevy_derive = "0.14.2"
 bevy_hierarchy = "0.14.2"
 bevy_reflect = "0.14.2"
 bevy_state = "0.14.2"
+bevy_time = "0.14.2"
 bevy_utils = "0.14.2"
 
 anyhow = { version = "1.0.44" }
