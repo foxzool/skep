@@ -2,7 +2,7 @@ use crate::helper::discovery_flow::DiscoveryKey;
 use bevy_utils::HashMap;
 use serde_json::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ConfigEntry {
     entry_id: String,
     domain: String,
@@ -65,6 +65,12 @@ enum ConfigEntryState {
     FailedUnload { recoverable: bool },
     /// The config entry is setting up
     SetupInProgress { recoverable: bool },
+}
+
+impl Default for ConfigEntryState {
+    fn default() -> Self {
+        Self::NotLoaded { recoverable: true }
+    }
 }
 
 impl ConfigEntryState {

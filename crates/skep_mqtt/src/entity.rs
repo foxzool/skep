@@ -1,5 +1,6 @@
 use crate::{
     constants::{CONF_ENABLED_BY_DEFAULT, CONF_OBJECT_ID},
+    sensor::MqttSensorComponent,
     subscription::EntitySubscription,
     DiscoveryInfoType,
 };
@@ -105,18 +106,18 @@ name must be included in each entity's device configuration",
 }
 
 pub trait MqttAttributesMixin: SkepEntity {
-    fn new(&mut self, config: ConfigType);
+    fn init(&mut self, config: ConfigType);
     fn attributes_sub_state(&self) -> &HashMap<String, EntitySubscription>;
     fn attributes_config(&self) -> &ConfigType;
 }
 
 pub trait MqttAvailability: SkepEntity {
-    fn new(config: &ConfigType) -> Self;
+    fn init(config: &ConfigType) -> Self;
     fn availability_setup_from_config(&mut self, config: &ConfigType);
 }
 
 pub trait MqttDiscoveryUpdateMixin: SkepEntity {
-    fn new(
+    fn init(
         discovery_data: Option<DiscoveryInfoType>,
         // discovery_update: Option<
         //     // Box<dyn Fn(MQTTDiscoveryPayload) -> Pin<Box<dyn Future<Output = ()>>>>,
@@ -129,19 +130,19 @@ pub trait MqttDiscoveryUpdateMixin: SkepEntity {
 }
 
 pub trait MqttEntityDeviceInfo: SkepEntity {
-    fn new(specifications: Option<HashMap<String, Value>>, config_entry: ConfigEntry) -> Self;
+    fn init(specifications: Option<HashMap<String, Value>>, config_entry: ConfigEntry) -> Self;
 }
 
 pub trait MqttEntity:
     MqttAttributesMixin + MqttAttributesMixin + MqttDiscoveryUpdateMixin + MqttEntityDeviceInfo
 {
-    type EntityIdFormat;
-
     fn default_name(&self) -> Option<String>;
 
     fn get_attr_force_update(&self) -> bool {
         false
     }
+
+    fn entity_id_format(&self) -> &str;
 
     fn get_attr_has_entity_name(&self) -> bool {
         true
@@ -151,13 +152,7 @@ pub trait MqttEntity:
         false
     }
 
-    fn new(
-        config: ConfigType,
-        config_entry: ConfigEntry,
-        discovery_data: Option<DiscoveryInfoType>,
-    ) -> Self;
-
-    fn setup_common_attributes_from_config(&mut self, config: ConfigType) {
+    fn setup_common_attributes_from_config(&mut self, config: &ConfigType) {
         let entity_category = config.get(CONF_ENTITY_CATEGORY).and_then(|v| {
             v.as_str().and_then(|s| {
                 EntityCategory::from_str(s)
@@ -185,7 +180,7 @@ pub trait MqttEntity:
         false
     }
 
-    fn set_entity_name(&mut self, config: ConfigType) {
+    fn set_entity_name(&mut self, config: &ConfigType) {
         let name = match config.get(CONF_NAME) {
             Some(entity_name) => entity_name.as_str().map(|s| s.to_string()),
             None => {
@@ -208,11 +203,39 @@ name must be included in each entity's device configuration",
             }
         }
     }
+
+    fn config(&self) -> &ConfigType;
+
+    fn set_config(&mut self, config: ConfigType);
+    fn set_discovery(&mut self, discovery_data: Option<DiscoveryInfoType>);
+
+    fn init_mqtt_entity(
+        &mut self,
+        config: &ConfigType,
+        config_entry: &ConfigEntry,
+        discovery_data: Option<DiscoveryInfoType>,
+    ) {
+        self.set_config(config.clone());
+        let unique_id = config
+            .get(CONF_UNIQUE_ID)
+            .map(|v| v.as_str().unwrap().to_string());
+        self.set_unique_id(unique_id);
+        self.set_discovery(discovery_data);
+
+        self.setup_common_attributes_from_config(&config);
+        self.init_entity_id();
+    }
+
+    fn init_entity_id(&mut self) {
+        if let Some(object_id) = self.config().get(CONF_OBJECT_ID) {
+            println!("object_id: {:?}", object_id);
+        }
+    }
 }
 
 fn init_entity_id_from_config(
-    skep_res: &ResMut<SkepResource>,
-    skep_entity: &mut SkepEntityComponent,
+    // skep_res: &ResMut<SkepResource>,
+    skep_entity: &mut (impl SkepEntity + ?Sized),
     config: &ConfigType,
     entity_id_format: &str,
 ) {

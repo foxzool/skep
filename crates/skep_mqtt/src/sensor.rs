@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use skep_core::{
     config_entry::ConfigEntry,
-    constants::{EntityCategory, CONF_UNIQUE_ID},
+    constants::EntityCategory,
     helper::{
         device_registry::DeviceInfo,
         entity::{EntityDescription, SkepEntity},
@@ -19,7 +19,7 @@ use skep_core::{
 };
 use skep_sensor::ENTITY_ID_FORMAT;
 
-use bevy_ecs::world::CommandQueue;
+use bevy_ecs::{prelude::Commands, world::CommandQueue};
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
@@ -88,10 +88,41 @@ type ReceivePayloadType = Bytes;
 impl Default for MqttSensorComponent {
     fn default() -> Self {
         MqttSensorComponent {
+            entity_id: None,
+            entity_description: Default::default(),
+            assumed_state: false,
+            attribution: None,
+            available: false,
+            capability_attributes: None,
+            device_class: None,
+            device_info: None,
+            entity_category: None,
+            has_entity_name: false,
+            entity_picture: None,
+            entity_registry_enabled_default: false,
+            entity_registry_visible_default: false,
+            extra_state_attributes: Default::default(),
+            force_update: false,
+            icon: None,
+            name: None,
+            should_poll: false,
+            state: None,
+            supported_features: None,
+            translation_key: None,
+            translation_placeholders: Default::default(),
+            unique_id: None,
+            unit_of_measurement: None,
+            config: Default::default(),
             default_name: Some(DEFAULT_NAME.to_string()),
+            discovery: None,
+            subscriptions: Default::default(),
             entity_id_format: ENTITY_ID_FORMAT.to_string(),
+            last_rest: None,
             extra_blocked: MQTT_SENSOR_ATTRIBUTES_BLOCKED.to_owned(),
-            ..Default::default()
+
+            expiration_trigger: None,
+            expire_after: None,
+            expired: None,
         }
     }
 }
@@ -100,7 +131,7 @@ const DEFAULT_NAME: &str = "MQTT Sensor";
 const DEFAULT_FORCE_UPDATE: bool = false;
 
 impl MqttAttributesMixin for MqttSensorComponent {
-    fn new(&mut self, config: ConfigType) {
+    fn init(&mut self, config: ConfigType) {
         todo!()
     }
 
@@ -145,10 +176,14 @@ impl SkepEntity for MqttSensorComponent {
     fn should_poll(&self) -> bool {
         false
     }
+
+    fn set_unique_id(&mut self, unique_id: Option<String>) {
+        self.unique_id = unique_id;
+    }
 }
 
 impl MqttDiscoveryUpdateMixin for MqttSensorComponent {
-    fn new(discovery_data: Option<DiscoveryInfoType>) -> Self {
+    fn init(discovery_data: Option<DiscoveryInfoType>) -> Self {
         todo!()
     }
 
@@ -162,40 +197,53 @@ impl MqttDiscoveryUpdateMixin for MqttSensorComponent {
 }
 
 impl MqttEntityDeviceInfo for MqttSensorComponent {
-    fn new(specifications: Option<HashMap<String, Value>>, config_entry: ConfigEntry) -> Self {
+    fn init(specifications: Option<HashMap<String, Value>>, config_entry: ConfigEntry) -> Self {
         todo!()
     }
 }
 
 impl MqttEntity for MqttSensorComponent {
-    type EntityIdFormat = String;
-
     fn default_name(&self) -> Option<String> {
         self.default_name.clone()
     }
 
-    fn new(
+    fn entity_id_format(&self) -> &str {
+        self.entity_id_format.as_str()
+    }
+
+    fn config(&self) -> &ConfigType {
+        &self.config
+    }
+
+    fn set_config(&mut self, config: ConfigType) {
+        self.config = config;
+    }
+
+    fn set_discovery(&mut self, discovery_data: Option<DiscoveryInfoType>) {
+        self.discovery = discovery_data;
+    }
+}
+
+impl MqttSensorComponent {
+    pub fn new(
         config: ConfigType,
         config_entry: ConfigEntry,
         discovery_data: Option<DiscoveryInfoType>,
     ) -> Self {
-        let mut entity = MqttSensorComponent::default();
-        entity.config = config.clone();
-        entity.unique_id = config
-            .get(CONF_UNIQUE_ID)
-            .map(|v| v.as_str().unwrap().to_string());
-        entity.discovery = discovery_data.clone();
+        let mut sensor = MqttSensorComponent::default();
+        sensor.init_mqtt_entity(&config, &config_entry, discovery_data.clone());
 
-        entity.setup_common_attributes_from_config(entity.config.clone());
-
-        entity
+        sensor
     }
 }
 
 const DOMAIN: &str = "sensor";
 
-fn on_setup_entry(trigger: Trigger<SetupConfigEntry>) {
+fn on_setup_entry(trigger: Trigger<SetupConfigEntry>, mut commands: Commands) {
     if trigger.event().component == DOMAIN {
-        println!("Setup sensor");
+        let config = ConfigType::default();
+        let config_entry = ConfigEntry::default();
+        let sensor = MqttSensorComponent::new(config, config_entry, None);
+        commands.spawn(sensor);
     }
 }

@@ -160,6 +160,8 @@ pub trait SkepEntity {
         None
     }
 
+    fn set_unique_id(&mut self, unique_id: Option<String>);
+
     fn unit_of_measurement(&self) -> Option<String> {
         None
     }

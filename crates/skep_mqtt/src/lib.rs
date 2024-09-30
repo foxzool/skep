@@ -1,5 +1,6 @@
 use crate::{
     binary_sensor::MqttBinarySensorPlugin,
+    constants::DOMAIN,
     discovery::{
         on_discovery_message_received, process_discovery_payload, sub_default_topic,
         ProcessDiscoveryPayload,
@@ -14,7 +15,9 @@ use bevy_state::app::StatesPlugin;
 use bevy_utils::HashSet;
 use serde::Deserialize;
 use serde_json::{Map, Value};
-use skep_core::{integration::Integration, loader::LoadConfig, platform::Platform};
+use skep_core::{
+    integration::Integration, loader::LoadConfig, platform::Platform, typing::ConfigType,
+};
 use std::collections::{HashMap, VecDeque};
 
 mod abbreviations;
@@ -50,7 +53,7 @@ impl Plugin for SkepMqttPlugin {
                 ),
             )
             .add_plugins((MqttSensorPlugin, MqttBinarySensorPlugin))
-            .observe(on_load_config)
+            .observe(reload_config)
             .observe(process_discovery_payload);
     }
 }
@@ -80,6 +83,8 @@ pub(crate) struct SkepMqttPlatform {
     #[reflect(ignore)]
     pub discovery_pending_discovered: HashMap<(String, String), PendingDiscovered>,
     pub platforms_loaded: HashSet<String>,
+    #[reflect(ignore)]
+    pub config: Vec<ConfigType>,
 }
 
 impl Default for SkepMqttPlatform {
@@ -90,6 +95,7 @@ impl Default for SkepMqttPlatform {
             discovery_already_discovered: Default::default(),
             discovery_pending_discovered: Default::default(),
             platforms_loaded: Default::default(),
+            config: vec![],
         }
     }
 }
@@ -128,14 +134,17 @@ struct MqttLoader {
     mqtt_config_entry: Vec<MqttConfig>,
 }
 
-pub fn on_load_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
+pub fn reload_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
     let binding = trigger.event().config.clone();
     let config_value = binding.as_object().unwrap();
 
-    if let Some(mqtt_config) = config_value.get("mqtt") {
-        if let Ok(config) = serde_json::from_value::<MqttLoader>(mqtt_config.clone()) {
-            println!("{:?}", config);
+    if let Some(mqtt_config) = config_value.get(DOMAIN) {
+        if let Some(mqtt_config_list) = mqtt_config.as_object() {
+            let config = serde_json::from_value::<ConfigType>(mqtt_config.clone()).ok();
 
+            println!("config: {:?}", config);
+        }
+        if let Ok(config) = serde_json::from_value::<MqttLoader>(mqtt_config.clone()) {
             for config_entry in config.mqtt_config_entry {
                 let mut mqtt_options = rumqttc::MqttOptions::new(
                     "skep-client",

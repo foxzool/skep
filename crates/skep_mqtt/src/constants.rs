@@ -80,3 +80,5 @@ pub const CONF_SUGGESTED_AREA: &str = "suggested_area";
 pub const CONF_CONFIGURATION_URL: &str = "configuration_url";
 pub const CONF_OBJECT_ID: &str = "object_id";
 pub const CONF_SUPPORT_URL: &str = "support_url";
+
+pub const DOMAIN: &str = "mqtt";
