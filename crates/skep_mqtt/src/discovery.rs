@@ -14,7 +14,7 @@ use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use skep_core::{
-    helper::{device_registry::DeviceInfo, entity::SkepEntity},
+    helper::{device_registry::DeviceInfo, entity::SkepEntityComponent},
     typing::SetupConfigEntry,
 };
 use std::collections::{HashMap, VecDeque};

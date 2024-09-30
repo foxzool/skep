@@ -1,11 +1,18 @@
-use crate::{constants::EntityCategory, helper::device_registry::DeviceInfo, typing::StateType};
+use crate::{
+    constants::{EntityCategory, STATE_UNKNOWN},
+    helper::device_registry::DeviceInfo,
+    typing::StateType,
+};
 use bevy_ecs::component::Component;
 use bevy_utils::HashMap;
+use either::Either;
 use serde_json::Value;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Component)]
-pub struct SkepEntity {
+pub struct SkepEntityComponent {
     pub entity_id: Option<String>,
+    entity_description: EntityDescription,
     assumed_state: bool,
     attribution: Option<String>,
     available: bool,
@@ -30,9 +37,9 @@ pub struct SkepEntity {
     unit_of_measurement: Option<String>,
 }
 
-impl Default for SkepEntity {
+impl Default for SkepEntityComponent {
     fn default() -> Self {
-        SkepEntity {
+        SkepEntityComponent {
             entity_registry_enabled_default: true,
             should_poll: true,
             ..Default::default()
@@ -40,4 +47,128 @@ impl Default for SkepEntity {
     }
 }
 
-impl SkepEntity {}
+impl SkepEntityComponent {}
+
+pub trait SkepEntity {
+    fn assumed_state(&self) -> bool {
+        true
+    }
+
+    fn attribution(&self) -> Option<String> {
+        None
+    }
+
+    fn available(&self) -> bool {
+        true
+    }
+
+    fn capability_attributes(&self) -> Option<HashMap<String, Value>> {
+        None
+    }
+
+    fn device_class(&self) -> Option<String> {
+        None
+    }
+
+    fn device_info(&self) -> Option<DeviceInfo> {
+        None
+    }
+
+    fn entity_category(&self) -> Option<EntityCategory> {
+        None
+    }
+
+    fn has_entity_name(&self) -> bool {
+        if let Some(has_entity_name) = self.attr_has_entity_name() {
+            return has_entity_name;
+        }
+        if let Some(entity_description) = self.attr_entity_description() {
+            return entity_description.has_entity_name;
+        }
+        false
+    }
+
+    fn attr_has_entity_name(&self) -> Option<bool>;
+
+    fn entity_picture(&self) -> Option<String> {
+        None
+    }
+
+    fn entity_registry_enabled_default(&self) -> bool {
+        true
+    }
+
+    fn entity_registry_visible_default(&self) -> bool {
+        true
+    }
+
+    fn extra_state_attributes(&self) -> Option<HashMap<String, Value>> {
+        None
+    }
+
+    fn force_update(&self) -> bool {
+        if let Some(force_update) = self.attr_force_update() {
+            return force_update;
+        }
+        if let Some(entity_description) = self.attr_entity_description() {
+            return entity_description.force_update;
+        }
+        false
+    }
+
+    fn attr_force_update(&self) -> Option<bool>;
+
+    fn attr_entity_description(&self) -> Option<EntityDescription>;
+
+    fn icon(&self) -> Option<String> {
+        None
+    }
+
+    fn name(&self) -> Option<String> {
+        None
+    }
+
+    fn should_poll(&self) -> bool {
+        true
+    }
+
+    fn state(&self) -> StateType {
+        Some(Either::Left(STATE_UNKNOWN.to_string()))
+    }
+
+    fn supported_features(&self) -> Option<i32> {
+        None
+    }
+
+    fn translation_key(&self) -> Option<String> {
+        None
+    }
+
+    fn translation_placeholders(&self) -> Option<HashMap<String, String>> {
+        None
+    }
+
+    fn unique_id(&self) -> Option<String> {
+        None
+    }
+
+    fn unit_of_measurement(&self) -> Option<String> {
+        None
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct EntityDescription {
+    pub key: String,
+    pub device_class: Option<String>,
+    pub entity_category: Option<String>,
+    pub entity_registry_enabled_default: bool,
+    pub entity_registry_visible_default: bool,
+    pub force_update: bool,
+    pub icon: Option<String>,
+    pub has_entity_name: bool,
+    pub name: Option<String>,
+    pub translation_key: Option<String>,
+    pub translation_placeholders: Option<std::collections::HashMap<String, String>>,
+    pub unit_of_measurement: Option<String>,
+}
