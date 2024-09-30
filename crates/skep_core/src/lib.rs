@@ -2,6 +2,9 @@ use crate::{
     domain::Domain, integration::Integration, loader::load_config_toml, platform::Platform,
 };
 use bevy_app::{App, Plugin, Startup};
+use bevy_ecs::system::Resource;
+use bevy_reflect::Reflect;
+use bevy_utils::HashSet;
 
 pub mod config_entry;
 pub mod constants;
@@ -23,7 +26,14 @@ impl Plugin for SkepCorePlugin {
             .register_type::<Integration>()
             .register_type::<Platform>()
             .register_type::<Domain>()
+            .register_type::<SkepResource>()
+            .init_resource::<SkepResource>()
             // .register_type::<DeviceEntry>()
             .add_systems(Startup, load_config_toml);
     }
+}
+
+#[derive(Debug, Resource, Default, Reflect)]
+pub struct SkepResource {
+    pub entity_ids: HashSet<String>,
 }

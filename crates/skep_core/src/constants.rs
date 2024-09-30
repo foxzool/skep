@@ -1,3 +1,5 @@
+use strum_macros::{Display, EnumString};
+
 pub const DEVICE_DEFAULT_NAME: &str = "Unnamed Device";
 
 pub const CONF_ABOVE: &str = "above";
@@ -224,3 +226,11 @@ pub const STATE_ALARM_TRIGGERED: &str = "triggered";
 pub const STATE_UNAVAILABLE: &str = "unavailable";
 pub const STATE_OK: &str = "ok";
 pub const STATE_PROBLEM: &str = "problem";
+
+#[derive(Debug, EnumString, Display, Clone)]
+#[strum(serialize_all = "snake_case")]
+#[strum(ascii_case_insensitive)]
+pub enum EntityCategory {
+    Config,
+    Diagnostic,
+}

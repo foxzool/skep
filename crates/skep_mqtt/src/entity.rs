@@ -1,113 +1,86 @@
 use crate::{
-    constants::CONF_ENABLED_BY_DEFAULT, subscription::EntitySubscription, DiscoveryInfoType,
+    constants::{CONF_ENABLED_BY_DEFAULT, CONF_OBJECT_ID},
+    subscription::EntitySubscription,
+    DiscoveryInfoType,
 };
+use bevy_ecs::prelude::ResMut;
 use bevy_utils::HashMap;
 use serde_json::Value;
 use skep_core::{
     config_entry::ConfigEntry,
-    constants::{CONF_DEVICE, CONF_ENTITY_CATEGORY, CONF_ICON, CONF_NAME, CONF_UNIQUE_ID},
-    device::DeviceInfo,
-    entity::{generate_entity_id, EntityCategory, SkipEntity},
+    constants::{
+        EntityCategory, CONF_DEVICE, CONF_ENTITY_CATEGORY, CONF_ICON, CONF_NAME, CONF_UNIQUE_ID,
+    },
+    helper::entity::SkepEntity,
     typing::ConfigType,
+    SkepResource,
 };
 use std::str::FromStr;
 
-impl SkipEntity for MqttEntity {
-    fn device_info(&self) -> Option<DeviceInfo> {
-        serde_json::from_value(serde_json::json!(self.device_specifications)).ok()
-    }
-
-    fn has_entity_name(&self) -> bool {
-        true
-    }
-
-    fn force_update(&self) -> bool {
-        false
-    }
-
-    fn should_poll(&self) -> bool {
-        false
-    }
-
-    fn name(&self) -> Option<String> {
-        self.name.clone()
-    }
-
-    fn entity_category(&self) -> Option<EntityCategory> {
-        self.entity_category.clone()
-    }
-
-    fn entity_registry_enabled_default(&self) -> bool {
-        self.entity_registry_enabled_default.unwrap_or(true)
-    }
-
-    fn icon(&self) -> Option<String> {
-        self.icon.clone()
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct MqttEntity {
-    entity_id: Option<String>,
     device_specifications: Option<HashMap<String, Value>>,
     config: ConfigType,
-    unique_id: Option<String>,
     sub_state: HashMap<String, EntitySubscription>,
     discovery: bool,
     subscriptions: HashMap<String, HashMap<String, Value>>,
-    entity_category: Option<EntityCategory>,
-    entity_registry_enabled_default: Option<bool>,
-    icon: Option<String>,
-    name: Option<String>,
     default_name: Option<String>,
     entity_id_format: String,
 }
 
 impl MqttEntity {
     pub fn new(
+        skep_res: &ResMut<SkepResource>,
         config: ConfigType,
         config_entry: ConfigEntry,
         discovery_data: Option<DiscoveryInfoType>,
-    ) -> anyhow::Result<MqttEntity> {
+    ) -> anyhow::Result<(SkepEntity, MqttEntity)> {
+        let mut skep_entity = SkepEntity::default();
         let mut mqtt_entity = MqttEntity::default();
         mqtt_entity.config = config.clone();
-        mqtt_entity.unique_id = config
+        skep_entity.unique_id = config
             .get(CONF_UNIQUE_ID)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
         mqtt_entity.discovery = discovery_data.is_some();
 
-        mqtt_entity.setup_common_attributes_from_config(config);
+        mqtt_entity.setup_common_attributes_from_config(&mut skep_entity, config);
+        mqtt_entity.init_entity_id();
 
-        Ok(mqtt_entity)
+        Ok((skep_entity, mqtt_entity))
     }
 
-    fn setup_common_attributes_from_config(&mut self, config: ConfigType) {
-        self.entity_category = config.get(CONF_ENTITY_CATEGORY).and_then(|v| {
+    fn setup_common_attributes_from_config(
+        &mut self,
+        skep_entity: &mut SkepEntity,
+        config: ConfigType,
+    ) {
+        skep_entity.entity_category = config.get(CONF_ENTITY_CATEGORY).and_then(|v| {
             v.as_str().and_then(|s| {
                 EntityCategory::from_str(s)
                     .map_err(|_| anyhow::anyhow!("Invalid entity category: {}", s))
                     .ok()
             })
         });
-        self.entity_registry_enabled_default = config
+        skep_entity.entity_registry_enabled_default = config
             .get(CONF_ENABLED_BY_DEFAULT)
-            .and_then(|v| v.as_bool());
-        self.icon = config
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        skep_entity.icon = config
             .get(CONF_ICON)
             .and_then(|v| v.as_str().map(|s| s.to_string()));
     }
 
-    fn set_entity_name(&mut self, config: ConfigType) {
+    fn set_entity_name(&mut self, skep_entity: &mut SkepEntity, config: ConfigType) {
         match config.get(CONF_NAME) {
             Some(entity_name) => {
-                self.name = entity_name.as_str().map(|s| s.to_string());
+                skep_entity.name = entity_name.as_str().map(|s| s.to_string());
             }
             None => {
                 if !self.default_to_device_class_name() {
-                    self.name = self.default_name.clone();
+                    skep_entity.name = self.default_name.clone();
                 } else {
-                    self.name = None;
+                    skep_entity.name = None;
                 }
             }
         }
@@ -124,11 +97,20 @@ name must be included in each entity's device configuration",
         }
     }
 
-    fn init_entity_id(&mut self) {}
+    fn default_to_device_class_name(&self) -> bool {
+        false
+    }
 
-    pub fn init_entity_id_from_config(&mut self, config: &ConfigType, entity_id_format: &str) {
-        if let Some(object_id) = config.get("object_id") {
-            // self.entity_id = generate_entity_id(entity_id_format, object_id, None);
-        }
+    fn init_entity_id(&mut self) {}
+}
+
+fn init_entity_id_from_config(
+    skep_res: &ResMut<SkepResource>,
+    skep_entity: &mut SkepEntity,
+    config: &ConfigType,
+    entity_id_format: &str,
+) {
+    if let Some(object_id) = config.get(CONF_OBJECT_ID) {
+        // skep_entity.entity_id = ;
     }
 }

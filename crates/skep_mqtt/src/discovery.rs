@@ -13,7 +13,10 @@ use bevy_mqtt::{
 use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use skep_core::{device::DeviceInfo, typing::SetupConfigEvent};
+use skep_core::{
+    helper::{device_registry::DeviceInfo, entity::SkepEntity},
+    typing::SetupConfigEntry,
+};
 use std::collections::{HashMap, VecDeque};
 
 /// Subscribe to default topic
@@ -71,7 +74,7 @@ pub(crate) const SUPPORTED_COMPONENTS: &[&str] = &[
     "water_heater",
 ];
 
-#[derive(Event)]
+#[derive(Event, Clone)]
 pub struct ProcessDiscoveryPayload {
     pub component: String,
     pub object_id: String,
@@ -97,56 +100,7 @@ pub(crate) fn on_discovery_message_received(
             );
             match handle_discovery_message(&topic_trimmed, &payload) {
                 Ok(Some(event)) => {
-                    let ProcessDiscoveryPayload {
-                        component,
-                        object_id: discovery_id,
-                        payload,
-                    } = &event;
-                    let discovery_hash = (component.to_string(), discovery_id.to_string());
-
-                    if let Some(pending) = mqtt_platform
-                        .discovery_pending_discovered
-                        .get_mut(&discovery_hash)
-                    {
-                        pending.pending.push_front(payload.clone());
-                        debug!(
-                            "Component has already been discovered: {} {}, queuing update",
-                            component, discovery_id,
-                        );
-                        return;
-                    }
-
-                    trace!("Process discovery payload {:?}", payload);
-
-                    let already_discovered = mqtt_platform
-                        .discovery_already_discovered
-                        .contains(&discovery_hash);
-                    if (already_discovered || !payload.is_empty())
-                        && !mqtt_platform
-                            .discovery_pending_discovered
-                            .contains_key(&discovery_hash)
-                    {
-                        mqtt_platform.discovery_pending_discovered.insert(
-                            discovery_hash.clone(),
-                            PendingDiscovered::new(VecDeque::new()),
-                        );
-                    }
-
-                    if !mqtt_platform.platforms_loaded.contains(component) {
-                        // debug!("{:?} waiting setup ", discovery_hash);
-                        if let Ok(Some(device_info)) = device_info_from_payload(payload.clone()) {
-                            commands.trigger_targets(device_info, vec![packet.entity]);
-                        }
-
-                        commands.trigger_targets(
-                            SetupConfigEvent {
-                                component: event.component,
-                                object_id: event.object_id,
-                                payload: event.payload.into(),
-                            },
-                            vec![packet.entity],
-                        );
-                    }
+                    commands.trigger_targets(event, vec![packet.entity]);
                 }
                 Ok(None) => {}
                 Err(e) => {
@@ -212,10 +166,6 @@ fn handle_discovery_message(
     };
 
     Ok(Some(trigger))
-}
-
-pub fn on_setup_component(trigger: Trigger<SetupConfigEvent>) {
-    debug!("on_setup_component {:?}", trigger.event());
 }
 
 // Replace all abbreviations in the payload
@@ -375,5 +325,62 @@ fn device_info_from_payload(payload: Map<String, Value>) -> anyhow::Result<Optio
         None => Ok(None),
         Some(device_value) => serde_json::from_value(device_value)
             .with_context(|| "Failed to deserialize device info"),
+    }
+}
+
+pub(crate) fn process_discovery_payload(
+    mut trigger: Trigger<ProcessDiscoveryPayload>,
+    mut query: Query<&mut SkepMqttPlatform>,
+    mut commands: Commands,
+) {
+    let event = trigger.event().clone();
+    let mut mqtt_platform = query.get_mut(trigger.entity()).unwrap();
+
+    let ProcessDiscoveryPayload {
+        component,
+        object_id: discovery_id,
+        payload,
+    } = &trigger.event();
+    let discovery_hash = (component.to_string(), discovery_id.to_string());
+
+    if let Some(pending) = mqtt_platform
+        .discovery_pending_discovered
+        .get_mut(&discovery_hash)
+    {
+        pending.pending.push_front(payload.clone());
+        debug!(
+            "Component has already been discovered: {} {}, queuing update",
+            component, discovery_id,
+        );
+        return;
+    }
+
+    trace!("Process discovery payload {:?}", payload);
+
+    let already_discovered = mqtt_platform
+        .discovery_already_discovered
+        .contains(&discovery_hash);
+    if (already_discovered || !payload.is_empty())
+        && !mqtt_platform
+            .discovery_pending_discovered
+            .contains_key(&discovery_hash)
+    {
+        mqtt_platform.discovery_pending_discovered.insert(
+            discovery_hash.clone(),
+            PendingDiscovered::new(VecDeque::new()),
+        );
+    }
+
+    if !mqtt_platform.platforms_loaded.contains(component) {
+        debug!("{:?} waiting setup ", discovery_hash);
+        // if let Ok(Some(device_info)) = device_info_from_payload(payload.clone()) {}
+        commands.trigger_targets(
+            SetupConfigEntry {
+                component: event.component,
+                object_id: event.object_id,
+                payload: event.payload.into(),
+            },
+            vec![trigger.entity()],
+        );
     }
 }

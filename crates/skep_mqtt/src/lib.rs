@@ -1,4 +1,11 @@
-use crate::discovery::{on_discovery_message_received, on_setup_component, sub_default_topic};
+use crate::{
+    binary_sensor::MqttBinarySensorPlugin,
+    discovery::{
+        on_discovery_message_received, process_discovery_payload, sub_default_topic,
+        ProcessDiscoveryPayload,
+    },
+    sensor::MqttSensorPlugin,
+};
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_mqtt::{rumqttc, MqttClientError, MqttConnectError, MqttPlugin, MqttSetting};
@@ -11,9 +18,11 @@ use skep_core::{integration::Integration, loader::LoadConfig, platform::Platform
 use std::collections::{HashMap, VecDeque};
 
 mod abbreviations;
+mod binary_sensor;
 mod constants;
 mod discovery;
 mod entity;
+mod sensor;
 mod subscription;
 
 type DiscoveryInfoType = Map<String, Value>;
@@ -29,6 +38,7 @@ impl Plugin for SkepMqttPlugin {
         app.add_plugins(MqttPlugin)
             .register_type::<SkepMqttPlatform>()
             .register_type::<HashSet<(String, String)>>()
+            .add_event::<ProcessDiscoveryPayload>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
@@ -38,8 +48,9 @@ impl Plugin for SkepMqttPlugin {
                     handle_error,
                 ),
             )
+            .add_plugins((MqttSensorPlugin, MqttBinarySensorPlugin))
             .observe(on_load_config)
-            .observe(on_setup_component);
+            .observe(process_discovery_payload);
     }
 }
 

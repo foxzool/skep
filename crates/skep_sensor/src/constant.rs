@@ -1,10 +1,11 @@
+use bevy_reflect::Reflect;
 use strum_macros::{Display, EnumString};
 
 pub const DOMAIN: &str = "sensor";
 
 pub const ENTITY_ID_FORMAT: &str = "sensor.{}";
 
-#[derive(Debug, EnumString, Display, PartialEq, Clone, Eq)]
+#[derive(Debug, EnumString, Display, PartialEq, Clone, Eq, Reflect)]
 #[strum(serialize_all = "snake_case")]
 #[strum(ascii_case_insensitive)]
 pub enum SensorDeviceClass {
