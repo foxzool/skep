@@ -1,6 +1,5 @@
 use crate::{
-    entity::{MqttAttributesMixin, MqttDiscoveryUpdateMixin, MqttEntity, MqttEntityDeviceInfo}
-    ,
+    entity::{MqttAttributesMixin, MqttDiscoveryUpdateMixin, MqttEntity, MqttEntityDeviceInfo},
     subscription::EntitySubscription,
     DiscoveryInfoType,
 };
@@ -115,8 +114,16 @@ impl MqttAttributesMixin for MqttSensorComponent {
 }
 
 impl SkepEntity for MqttSensorComponent {
+    fn set_entity_category(&mut self, entity_category: Option<EntityCategory>) {
+        self.entity_category = entity_category;
+    }
+
     fn attr_has_entity_name(&self) -> Option<bool> {
         Some(true)
+    }
+
+    fn set_entity_registry_enabled_default(&mut self, entity_registry_enabled_default: bool) {
+        self.entity_registry_visible_default = entity_registry_enabled_default;
     }
 
     fn attr_force_update(&self) -> Option<bool> {
@@ -125,6 +132,14 @@ impl SkepEntity for MqttSensorComponent {
 
     fn attr_entity_description(&self) -> Option<EntityDescription> {
         todo!()
+    }
+
+    fn set_icon(&mut self, icon: Option<String>) {
+        self.icon = icon;
+    }
+
+    fn set_name(&mut self, name: Option<String>) {
+        self.name = name;
     }
 
     fn should_poll(&self) -> bool {
@@ -153,8 +168,11 @@ impl MqttEntityDeviceInfo for MqttSensorComponent {
 }
 
 impl MqttEntity for MqttSensorComponent {
-    type DefaultName = Option<String>;
     type EntityIdFormat = String;
+
+    fn default_name(&self) -> Option<String> {
+        self.default_name.clone()
+    }
 
     fn new(
         config: ConfigType,
@@ -167,6 +185,8 @@ impl MqttEntity for MqttSensorComponent {
             .get(CONF_UNIQUE_ID)
             .map(|v| v.as_str().unwrap().to_string());
         entity.discovery = discovery_data.clone();
+
+        entity.setup_common_attributes_from_config(entity.config.clone());
 
         entity
     }

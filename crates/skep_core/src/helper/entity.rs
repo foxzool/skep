@@ -78,6 +78,8 @@ pub trait SkepEntity {
         None
     }
 
+    fn set_entity_category(&mut self, entity_category: Option<EntityCategory>);
+
     fn has_entity_name(&self) -> bool {
         if let Some(has_entity_name) = self.attr_has_entity_name() {
             return has_entity_name;
@@ -97,6 +99,8 @@ pub trait SkepEntity {
     fn entity_registry_enabled_default(&self) -> bool {
         true
     }
+
+    fn set_entity_registry_enabled_default(&mut self, entity_registry_enabled_default: bool);
 
     fn entity_registry_visible_default(&self) -> bool {
         true
@@ -124,9 +128,13 @@ pub trait SkepEntity {
         None
     }
 
+    fn set_icon(&mut self, icon: Option<String>);
+
     fn name(&self) -> Option<String> {
         None
     }
+
+    fn set_name(&mut self, name: Option<String>);
 
     fn should_poll(&self) -> bool {
         true

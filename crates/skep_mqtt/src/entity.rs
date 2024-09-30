@@ -135,8 +135,9 @@ pub trait MqttEntityDeviceInfo: SkepEntity {
 pub trait MqttEntity:
     MqttAttributesMixin + MqttAttributesMixin + MqttDiscoveryUpdateMixin + MqttEntityDeviceInfo
 {
-    type DefaultName;
     type EntityIdFormat;
+
+    fn default_name(&self) -> Option<String>;
 
     fn get_attr_force_update(&self) -> bool {
         false
@@ -155,6 +156,58 @@ pub trait MqttEntity:
         config_entry: ConfigEntry,
         discovery_data: Option<DiscoveryInfoType>,
     ) -> Self;
+
+    fn setup_common_attributes_from_config(&mut self, config: ConfigType) {
+        let entity_category = config.get(CONF_ENTITY_CATEGORY).and_then(|v| {
+            v.as_str().and_then(|s| {
+                EntityCategory::from_str(s)
+                    .map_err(|_| anyhow::anyhow!("Invalid entity category: {}", s))
+                    .ok()
+            })
+        });
+        self.set_entity_category(entity_category);
+
+        let entity_registry_enabled_default = config
+            .get(CONF_ENABLED_BY_DEFAULT)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        self.set_entity_registry_enabled_default(entity_registry_enabled_default);
+
+        let icon = config
+            .get(CONF_ICON)
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
+
+        self.set_icon(icon);
+        self.set_entity_name(config);
+    }
+
+    fn default_to_device_class_name(&self) -> bool {
+        false
+    }
+
+    fn set_entity_name(&mut self, config: ConfigType) {
+        let name = match config.get(CONF_NAME) {
+            Some(entity_name) => entity_name.as_str().map(|s| s.to_string()),
+            None => {
+                if !self.default_to_device_class_name() {
+                    self.default_name()
+                } else {
+                    None
+                }
+            }
+        };
+
+        if let Some(device) = config.get(CONF_DEVICE).and_then(|v| v.as_object()) {
+            if !device.contains_key(CONF_NAME) {
+                log::info!(
+                    "MQTT device information always needs to include a name, got {:?}, \
+if device information is shared between multiple entities, the device \
+name must be included in each entity's device configuration",
+                    config
+                );
+            }
+        }
+    }
 }
 
 fn init_entity_id_from_config(
