@@ -16,10 +16,14 @@ use skep_core::{
         entity::{EntityDescription, SkepEntity},
     },
     typing::{ConfigType, SetupConfigEntry, StateType},
+    SkepResource,
 };
 use skep_sensor::ENTITY_ID_FORMAT;
 
-use bevy_ecs::{prelude::Commands, world::CommandQueue};
+use bevy_ecs::{
+    prelude::{Commands, ResMut},
+    world::CommandQueue,
+};
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
@@ -149,6 +153,10 @@ impl SkepEntity for MqttSensorComponent {
         self.entity_category = entity_category;
     }
 
+    fn set_entity_id(&mut self, entity_id: Option<String>) {
+        self.entity_id = entity_id;
+    }
+
     fn attr_has_entity_name(&self) -> Option<bool> {
         Some(true)
     }
@@ -226,12 +234,13 @@ impl MqttEntity for MqttSensorComponent {
 
 impl MqttSensorComponent {
     pub fn new(
+        skep_res: ResMut<SkepResource>,
         config: ConfigType,
         config_entry: ConfigEntry,
         discovery_data: Option<DiscoveryInfoType>,
     ) -> Self {
         let mut sensor = MqttSensorComponent::default();
-        sensor.init_mqtt_entity(&config, &config_entry, discovery_data.clone());
+        sensor.init_mqtt_entity(skep_res, &config, &config_entry, discovery_data.clone());
 
         sensor
     }
@@ -239,11 +248,15 @@ impl MqttSensorComponent {
 
 const DOMAIN: &str = "sensor";
 
-fn on_setup_entry(trigger: Trigger<SetupConfigEntry>, mut commands: Commands) {
+fn on_setup_entry(
+    trigger: Trigger<SetupConfigEntry>,
+    mut commands: Commands,
+    mut skep_res: ResMut<SkepResource>,
+) {
     if trigger.event().component == DOMAIN {
-        let config = ConfigType::default();
+        let config = trigger.event().payload.as_object().unwrap().clone();
         let config_entry = ConfigEntry::default();
-        let sensor = MqttSensorComponent::new(config, config_entry, None);
+        let sensor = MqttSensorComponent::new(skep_res, config, config_entry, None);
         commands.spawn(sensor);
     }
 }

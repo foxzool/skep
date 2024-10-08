@@ -211,6 +211,7 @@ name must be included in each entity's device configuration",
 
     fn init_mqtt_entity(
         &mut self,
+        mut skep_res: ResMut<SkepResource>,
         config: &ConfigType,
         config_entry: &ConfigEntry,
         discovery_data: Option<DiscoveryInfoType>,
@@ -223,23 +224,28 @@ name must be included in each entity's device configuration",
         self.set_discovery(discovery_data);
 
         self.setup_common_attributes_from_config(&config);
-        self.init_entity_id();
+        self.init_entity_id(&mut skep_res);
     }
 
-    fn init_entity_id(&mut self) {
+    fn init_entity_id(&mut self, skep_res: &mut ResMut<SkepResource>) {
+        println!("config {:#?}", self.config());
+        self.init_entity_id_from_config(skep_res).unwrap();
+    }
+
+    fn init_entity_id_from_config(
+        &mut self,
+        skep_res: &mut ResMut<SkepResource>,
+    ) -> anyhow::Result<()> {
         if let Some(object_id) = self.config().get(CONF_OBJECT_ID) {
-            println!("object_id: {:?}", object_id);
+            let current_ids = skep_res.entity_ids.clone().into_iter().collect();
+            let entity_id = skep_res.generate_entity_id(
+                self.entity_id_format(),
+                object_id.as_str(),
+                Some(current_ids),
+            )?;
+            self.set_entity_id(Some(entity_id));
         }
-    }
-}
 
-fn init_entity_id_from_config(
-    // skep_res: &ResMut<SkepResource>,
-    skep_entity: &mut (impl SkepEntity + ?Sized),
-    config: &ConfigType,
-    entity_id_format: &str,
-) {
-    if let Some(object_id) = config.get(CONF_OBJECT_ID) {
-        // let skep_entity =
+        Ok(())
     }
 }

@@ -90,6 +90,12 @@ pub trait SkepEntity {
         false
     }
 
+    fn entity_id(&self) -> Option<String> {
+        None
+    }
+
+    fn set_entity_id(&mut self, entity_id: Option<String>);
+
     fn attr_has_entity_name(&self) -> Option<bool>;
 
     fn entity_picture(&self) -> Option<String> {
