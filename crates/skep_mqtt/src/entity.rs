@@ -1,5 +1,9 @@
 use crate::{
-    constants::{CONF_ENABLED_BY_DEFAULT, CONF_OBJECT_ID},
+    constants::{
+        CONF_AVAILABILITY, CONF_AVAILABILITY_TEMPLATE, CONF_AVAILABILITY_TOPIC,
+        CONF_ENABLED_BY_DEFAULT, CONF_OBJECT_ID, CONF_PAYLOAD_AVAILABLE,
+        CONF_PAYLOAD_NOT_AVAILABLE, CONF_TOPIC,
+    },
     sensor::MqttSensorComponent,
     subscription::EntitySubscription,
     DiscoveryInfoType,
@@ -11,6 +15,7 @@ use skep_core::{
     config_entry::ConfigEntry,
     constants::{
         EntityCategory, CONF_DEVICE, CONF_ENTITY_CATEGORY, CONF_ICON, CONF_NAME, CONF_UNIQUE_ID,
+        CONF_VALUE_TEMPLATE,
     },
     helper::entity::{SkepEntity, SkepEntityComponent},
     typing::ConfigType,
@@ -113,9 +118,89 @@ pub trait MqttAttributesMixin: SkepEntity {
     fn set_attributes_config(&mut self, config: ConfigType);
 }
 
-pub trait MqttAvailability: SkepEntity {
-    fn init(config: &ConfigType) -> Self;
-    fn availability_setup_from_config(&mut self, config: &ConfigType);
+pub trait MqttAvailabilityMixin: SkepEntity {
+    fn init_availability(&mut self, config: &ConfigType);
+    fn set_available_latest(&mut self, available: bool);
+    fn availability_setup_from_config(&mut self, config: &ConfigType) {
+        let mut avail_topics = HashMap::new();
+
+        if let Some(topic) = config.get(CONF_AVAILABILITY_TOPIC) {
+            avail_topics.insert(
+                topic.to_string(),
+                HashMap::from([
+                    (
+                        CONF_PAYLOAD_AVAILABLE.to_string(),
+                        config[CONF_PAYLOAD_AVAILABLE].clone(),
+                    ),
+                    (
+                        CONF_PAYLOAD_NOT_AVAILABLE.to_string(),
+                        config[CONF_PAYLOAD_NOT_AVAILABLE].clone(),
+                    ),
+                    (
+                        CONF_AVAILABILITY_TEMPLATE.to_string(),
+                        config
+                            .get(CONF_AVAILABILITY_TEMPLATE)
+                            .cloned()
+                            .unwrap_or_default(),
+                    ),
+                ]),
+            );
+        }
+
+        if let Some(availability) = config.get(CONF_AVAILABILITY) {
+            if let Value::Array(avails) = availability {
+                for avail_value in avails {
+                    if let Value::Object(avail) = avail_value {
+                        if let Some(topic) = avail.get(CONF_TOPIC) {
+                            if let Value::String(topic_str) = topic {
+                                avail_topics.insert(
+                                    topic_str.to_string(),
+                                    [
+                                        (
+                                            CONF_PAYLOAD_AVAILABLE.to_string(),
+                                            avail[CONF_PAYLOAD_AVAILABLE].clone(),
+                                        ),
+                                        (
+                                            CONF_PAYLOAD_NOT_AVAILABLE.to_string(),
+                                            avail[CONF_PAYLOAD_NOT_AVAILABLE].clone(),
+                                        ),
+                                        (
+                                            CONF_VALUE_TEMPLATE.to_string(),
+                                            match avail.get(CONF_VALUE_TEMPLATE) {
+                                                Some(template) => template.clone(),
+                                                None => Value::Null,
+                                            },
+                                        ),
+                                    ]
+                                    .iter()
+                                    .cloned()
+                                    .collect(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for avail_topic_conf in avail_topics.values_mut() {
+            if let Some(_template) = avail_topic_conf.get_mut(CONF_AVAILABILITY_TEMPLATE) {
+
+                // TODO
+                // if !template.is_empty() {
+                //     *template = MqttValueTemplate::new(template.clone(), self)
+                //         .async_render_with_possible_json_value();
+                // }
+            }
+        }
+
+        self.set_avail_topics(avail_topics);
+        self.set_avail_config(config.clone());
+    }
+
+    fn set_avail_config(&mut self, config: ConfigType);
+
+    fn set_avail_topics(&mut self, avail_topics: HashMap<String, HashMap<String, Value>>);
 }
 
 pub trait MqttDiscoveryUpdateMixin: SkepEntity {
