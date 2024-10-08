@@ -106,9 +106,11 @@ name must be included in each entity's device configuration",
 }
 
 pub trait MqttAttributesMixin: SkepEntity {
-    fn init(&mut self, config: ConfigType);
+    fn init_attributes(&mut self, config: ConfigType);
     fn attributes_sub_state(&self) -> &HashMap<String, EntitySubscription>;
+    fn set_attributes_sub_state(&mut self, sub_state: HashMap<String, EntitySubscription>);
     fn attributes_config(&self) -> &ConfigType;
+    fn set_attributes_config(&mut self, config: ConfigType);
 }
 
 pub trait MqttAvailability: SkepEntity {

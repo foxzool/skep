@@ -85,6 +85,8 @@ pub struct MqttSensorComponent {
     // template: Option<Arc<Mutex<dyn Fn(ReceivePayloadType, PayloadSentinel) ->
     // ReceivePayloadType>>>, last_reset_template: Option<Box<dyn Fn(ReceivePayloadType) ->
     // ReceivePayloadType>>,
+    attributes_sub_state: HashMap<String, EntitySubscription>,
+    attributes_config: Option<ConfigType>,
 }
 
 type ReceivePayloadType = Bytes;
@@ -123,10 +125,11 @@ impl Default for MqttSensorComponent {
             entity_id_format: ENTITY_ID_FORMAT.to_string(),
             last_rest: None,
             extra_blocked: MQTT_SENSOR_ATTRIBUTES_BLOCKED.to_owned(),
-
             expiration_trigger: None,
             expire_after: None,
             expired: None,
+            attributes_sub_state: Default::default(),
+            attributes_config: None,
         }
     }
 }
@@ -135,16 +138,24 @@ const DEFAULT_NAME: &str = "MQTT Sensor";
 const DEFAULT_FORCE_UPDATE: bool = false;
 
 impl MqttAttributesMixin for MqttSensorComponent {
-    fn init(&mut self, config: ConfigType) {
-        todo!()
+    fn init_attributes(&mut self, config: ConfigType) {
+        self.set_attributes_config(config);
     }
 
     fn attributes_sub_state(&self) -> &HashMap<String, EntitySubscription> {
         todo!()
     }
 
+    fn set_attributes_sub_state(&mut self, sub_state: HashMap<String, EntitySubscription>) {
+        todo!()
+    }
+
     fn attributes_config(&self) -> &ConfigType {
         todo!()
+    }
+
+    fn set_attributes_config(&mut self, config: ConfigType) {
+        self.attributes_config = Some(config);
     }
 }
 
@@ -241,6 +252,7 @@ impl MqttSensorComponent {
     ) -> Self {
         let mut sensor = MqttSensorComponent::default();
         sensor.init_mqtt_entity(skep_res, &config, &config_entry, discovery_data.clone());
+        sensor.init_attributes(config.clone());
 
         sensor
     }
