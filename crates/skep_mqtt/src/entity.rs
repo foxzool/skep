@@ -4,11 +4,12 @@ use crate::{
         CONF_ENABLED_BY_DEFAULT, CONF_OBJECT_ID, CONF_PAYLOAD_AVAILABLE,
         CONF_PAYLOAD_NOT_AVAILABLE, CONF_TOPIC,
     },
+    discovery::MQTTDiscoveryPayload,
     sensor::MqttSensorComponent,
     subscription::EntitySubscription,
     DiscoveryInfoType,
 };
-use bevy_ecs::prelude::ResMut;
+use bevy_ecs::prelude::{In, ResMut, System};
 use bevy_utils::HashMap;
 use serde_json::Value;
 use skep_core::{
@@ -205,11 +206,20 @@ pub trait MqttAvailabilityMixin: SkepEntity {
 
 pub trait MqttDiscoveryUpdateMixin: SkepEntity {
     fn init(
+        &mut self,
         discovery_data: Option<DiscoveryInfoType>,
-        // discovery_update: Option<
-        //     // Box<dyn Fn(MQTTDiscoveryPayload) -> Pin<Box<dyn Future<Output = ()>>>>,
-        // >,
-    ) -> Self;
+        discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
+    ) {
+        self.set_discovery_data(discovery_data);
+        self.set_discovery_update(discovery_update);
+    }
+
+    fn set_discovery_data(&mut self, discovery_data: Option<DiscoveryInfoType>);
+
+    fn set_discovery_update(
+        &mut self,
+        discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
+    );
 
     fn get_device_specifications(&self) -> Option<&HashMap<String, Value>>;
 

@@ -20,9 +20,9 @@ use skep_core::{
 };
 use skep_sensor::ENTITY_ID_FORMAT;
 
-use crate::entity::MqttAvailabilityMixin;
+use crate::{discovery::MQTTDiscoveryPayload, entity::MqttAvailabilityMixin};
 use bevy_ecs::{
-    prelude::{Commands, ResMut},
+    prelude::{Commands, In, ResMut, System},
     world::CommandQueue,
 };
 use bytes::Bytes;
@@ -92,6 +92,9 @@ pub struct MqttSensorComponent {
     available_latest: bool,
     avail_topics: HashMap<String, HashMap<String, Value>>,
     avail_config: Option<ConfigType>,
+
+    discovery_data: Option<DiscoveryInfoType>,
+    discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
 }
 
 type ReceivePayloadType = Bytes;
@@ -138,6 +141,8 @@ impl Default for MqttSensorComponent {
             available_latest: false,
             avail_topics: Default::default(),
             avail_config: None,
+            discovery_data: None,
+            discovery_update: None,
         }
     }
 }
@@ -210,8 +215,15 @@ impl SkepEntity for MqttSensorComponent {
 }
 
 impl MqttDiscoveryUpdateMixin for MqttSensorComponent {
-    fn init(discovery_data: Option<DiscoveryInfoType>) -> Self {
-        todo!()
+    fn set_discovery_data(&mut self, discovery_data: Option<DiscoveryInfoType>) {
+        self.discovery_data = discovery_data;
+    }
+
+    fn set_discovery_update(
+        &mut self,
+        discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
+    ) {
+        self.discovery_update = discovery_update;
     }
 
     fn get_device_specifications(&self) -> Option<&HashMap<String, Value>> {

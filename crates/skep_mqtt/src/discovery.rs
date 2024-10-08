@@ -19,6 +19,8 @@ use skep_core::{
 };
 use std::collections::{HashMap, VecDeque};
 
+pub struct MQTTDiscoveryPayload(pub Map<String, Value>);
+
 /// Subscribe to default topic
 pub fn sub_default_topic(
     mqtt_clients: Query<(&SkepMqttPlatform, &MqttClient), Added<MqttClientConnected>>,
