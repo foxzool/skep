@@ -16,7 +16,7 @@ use skep_core::{
         entity::{EntityDescription, SkepEntity},
     },
     typing::{ConfigType, SetupConfigEntry, StateType},
-    SkepResource,
+    CallbackType, SkepResource,
 };
 use skep_sensor::ENTITY_ID_FORMAT;
 
@@ -95,6 +95,7 @@ pub struct MqttSensorComponent {
 
     discovery_data: Option<DiscoveryInfoType>,
     discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
+    remove_discovery_updated: Option<Box<dyn System<In = In<()>, Out = ()>>>,
 }
 
 type ReceivePayloadType = Bytes;
@@ -143,6 +144,7 @@ impl Default for MqttSensorComponent {
             avail_config: None,
             discovery_data: None,
             discovery_update: None,
+            remove_discovery_updated: None,
         }
     }
 }
@@ -224,6 +226,10 @@ impl MqttDiscoveryUpdateMixin for MqttSensorComponent {
         discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
     ) {
         self.discovery_update = discovery_update;
+    }
+
+    fn set_remove_discovery_update(&mut self, callback_type: Option<CallbackType>) {
+        self.remove_discovery_updated = callback_type;
     }
 
     fn get_device_specifications(&self) -> Option<&HashMap<String, Value>> {

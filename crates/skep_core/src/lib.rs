@@ -4,7 +4,10 @@ use crate::{
     loader::load_config_toml, platform::Platform,
 };
 use bevy_app::{App, Plugin, Startup};
-use bevy_ecs::system::Resource;
+use bevy_ecs::{
+    prelude::{In, System},
+    system::Resource,
+};
 use bevy_reflect::Reflect;
 use bevy_utils::HashSet;
 use dyn_fmt::AsStrFormatExt;
@@ -87,3 +90,5 @@ fn ensure_unique_string(
 
     test_string
 }
+
+pub type CallbackType = Box<dyn System<In = In<()>, Out = ()>>;

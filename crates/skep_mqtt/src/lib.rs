@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use skep_core::{
     integration::Integration, loader::LoadConfig, platform::Platform, typing::ConfigType,
+    CallbackType,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -82,6 +83,8 @@ pub(crate) struct SkepMqttPlatform {
     pub discovery_already_discovered: HashSet<(String, String)>,
     #[reflect(ignore)]
     pub discovery_pending_discovered: HashMap<(String, String), PendingDiscovered>,
+    #[reflect(ignore)]
+    pub discovery_registry_hooks: HashMap<(String, String), CallbackType>,
     pub platforms_loaded: HashSet<String>,
     #[reflect(ignore)]
     pub config: Vec<ConfigType>,
@@ -94,6 +97,7 @@ impl Default for SkepMqttPlatform {
             discovery_prefix: "homeassistant".to_string(),
             discovery_already_discovered: Default::default(),
             discovery_pending_discovered: Default::default(),
+            discovery_registry_hooks: Default::default(),
             platforms_loaded: Default::default(),
             config: vec![],
         }

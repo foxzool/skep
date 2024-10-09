@@ -20,7 +20,7 @@ use skep_core::{
     },
     helper::entity::{SkepEntity, SkepEntityComponent},
     typing::ConfigType,
-    SkepResource,
+    CallbackType, SkepResource,
 };
 use std::str::FromStr;
 
@@ -205,13 +205,17 @@ pub trait MqttAvailabilityMixin: SkepEntity {
 }
 
 pub trait MqttDiscoveryUpdateMixin: SkepEntity {
-    fn init(
+    fn init_discovery_update(
         &mut self,
         discovery_data: Option<DiscoveryInfoType>,
         discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
     ) {
-        self.set_discovery_data(discovery_data);
+        self.set_discovery_data(discovery_data.clone());
         self.set_discovery_update(discovery_update);
+        self.set_remove_discovery_update(None);
+        if discovery_data.is_none() {
+            return;
+        }
     }
 
     fn set_discovery_data(&mut self, discovery_data: Option<DiscoveryInfoType>);
@@ -220,6 +224,8 @@ pub trait MqttDiscoveryUpdateMixin: SkepEntity {
         &mut self,
         discovery_update: Option<Box<dyn System<In = In<MQTTDiscoveryPayload>, Out = ()>>>,
     );
+
+    fn set_remove_discovery_update(&mut self, callback_type: Option<CallbackType>);
 
     fn get_device_specifications(&self) -> Option<&HashMap<String, Value>>;
 
