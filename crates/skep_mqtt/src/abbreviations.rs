@@ -1,5 +1,5 @@
+use bevy_utils::HashMap;
 use lazy_static::lazy_static;
-use std::collections::HashMap;
 
 lazy_static! {
     pub(crate) static ref ABBREVIATIONS: HashMap<&'static str, &'static str> = {

@@ -10,6 +10,15 @@ use bevy_mqtt::{
     MqttClient, MqttClientConnected, MqttPublishPacket,
 };
 
+use bevy_core::Name;
+use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::{
+    component::{ComponentHooks, StorageType},
+    world::DeferredWorld,
+};
+use bevy_hierarchy::{BuildChildren, Parent};
+use bevy_reflect::Reflect;
+use bevy_utils::HashMap;
 use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -17,9 +26,59 @@ use skep_core::{
     helper::{device_registry::DeviceInfo, entity::SkepEntityComponent},
     typing::SetupConfigEntry,
 };
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::VecDeque,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
+use strum_macros::{Display, EnumString};
 
-pub struct MQTTDiscoveryPayload(pub Map<String, Value>);
+#[derive(Debug, Component, EnumString, Display, Clone, PartialEq, Eq, Hash, Reflect)]
+#[strum(serialize_all = "snake_case")]
+#[strum(ascii_case_insensitive)]
+pub enum MQTTSupportComponent {
+    Sensor,
+}
+
+#[derive(Debug, Reflect, Hash, PartialEq, Eq, Clone)]
+pub struct MQTTDiscoveryHash {
+    pub component: String,
+    pub discovery_id: String,
+}
+
+impl Display for MQTTDiscoveryHash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.component, self.discovery_id)
+    }
+}
+
+impl Component for MQTTDiscoveryHash {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_add(|mut world: DeferredWorld, entity, _component_id| {
+            let discovery_hash = world.get::<MQTTDiscoveryHash>(entity).unwrap();
+            let component_name = discovery_hash.component.clone();
+            let name = Name::new(format!(
+                "{} {}",
+                discovery_hash.component, discovery_hash.discovery_id
+            ));
+            let mut commands = world.commands();
+            let mut binding = commands.entity(entity);
+            let mut e = binding.insert(name);
+            if let Ok(mqtt_component) = MQTTSupportComponent::from_str(&component_name) {
+                e.insert(mqtt_component);
+            } else {
+                warn!("Component not supported: {}", component_name);
+            }
+        });
+    }
+}
+
+#[derive(Debug, Component)]
+pub struct MQTTDiscoveryPayload {
+    pub payload: HashMap<String, Value>,
+}
 
 /// Subscribe to default topic
 pub fn sub_default_topic(
@@ -80,7 +139,7 @@ pub(crate) const SUPPORTED_COMPONENTS: &[&str] = &[
 pub struct ProcessDiscoveryPayload {
     pub component: String,
     pub object_id: String,
-    pub payload: Map<String, Value>,
+    pub payload: HashMap<String, Value>,
 }
 
 pub(crate) fn on_discovery_message_received(
@@ -101,8 +160,9 @@ pub(crate) fn on_discovery_message_received(
                 1,
             );
             match handle_discovery_message(&topic_trimmed, &payload) {
-                Ok(Some(event)) => {
-                    commands.trigger_targets(event, vec![packet.entity]);
+                Ok(Some(discovery_bundle)) => {
+                    let child = commands.spawn(discovery_bundle).id();
+                    commands.entity(packet.entity).add_child(child);
                 }
                 Ok(None) => {}
                 Err(e) => {
@@ -121,7 +181,7 @@ fn handle_discovery_message(
     // mut mqtt_res: ResMut<MqttResource>,
     topic: &str,
     payload: &[u8],
-) -> anyhow::Result<Option<ProcessDiscoveryPayload>> {
+) -> anyhow::Result<Option<(MQTTDiscoveryHash, MQTTDiscoveryPayload)>> {
     let (component, node_id, object_id) = parse_topic_config(topic)?;
 
     let mut discovery_payload = match serde_json::from_slice::<Value>(payload) {
@@ -161,13 +221,15 @@ fn handle_discovery_message(
         discovery_payload.insert("platform".to_string(), Value::String("mqtt".to_string()));
     }
 
-    let trigger = ProcessDiscoveryPayload {
-        component,
-        object_id: discovery_id.clone(),
-        payload: discovery_payload,
-    };
-
-    Ok(Some(trigger))
+    Ok(Some((
+        MQTTDiscoveryHash {
+            component,
+            discovery_id,
+        },
+        MQTTDiscoveryPayload {
+            payload: discovery_payload.into_iter().collect(),
+        },
+    )))
 }
 
 // Replace all abbreviations in the payload
@@ -300,6 +362,46 @@ fn replace_topic_base(discovery_payload: &mut Map<String, Value>) {
     }
 }
 
+fn device_info_from_payload(payload: Map<String, Value>) -> anyhow::Result<Option<DeviceInfo>> {
+    match payload.get("device").cloned() {
+        None => Ok(None),
+        Some(device_value) => serde_json::from_value(device_value)
+            .with_context(|| "Failed to deserialize device info"),
+    }
+}
+
+pub(crate) fn process_discovery_payload(
+    mut query: Query<&mut SkepMqttPlatform>,
+    mut commands: Commands,
+    mut added_discovery: Query<
+        (&Parent, &MQTTDiscoveryHash, &MQTTDiscoveryPayload),
+        Added<MQTTDiscoveryPayload>,
+    >,
+) {
+    for (parent, discovery_hash, payload) in added_discovery.iter() {
+        let mut mqtt_platform = query.get_mut(parent.get()).unwrap();
+        let component = discovery_hash.component.clone();
+        trace!("Process discovery payload {:?}", payload);
+
+        if let Some(entity) = mqtt_platform.platforms_loaded.get(&component) {
+            if mqtt_platform
+                .discovery_already_discovered
+                .insert(discovery_hash.clone())
+            {
+                debug!("Component discovered: {}", discovery_hash);
+            } else {
+                debug!(
+                    "Component has already been discovered: {}, queuing update",
+                    discovery_hash
+                );
+            }
+        } else {
+            warn!("Component Handler not loaded: {}", component);
+            return;
+        }
+    }
+}
+
 #[test]
 fn test_replace_base_topic() {
     let mut json = json!({
@@ -320,69 +422,4 @@ fn test_replace_base_topic() {
            "state_topic":"homeassistant/switch/irrigation/state"
         })
     );
-}
-
-fn device_info_from_payload(payload: Map<String, Value>) -> anyhow::Result<Option<DeviceInfo>> {
-    match payload.get("device").cloned() {
-        None => Ok(None),
-        Some(device_value) => serde_json::from_value(device_value)
-            .with_context(|| "Failed to deserialize device info"),
-    }
-}
-
-pub(crate) fn process_discovery_payload(
-    mut trigger: Trigger<ProcessDiscoveryPayload>,
-    mut query: Query<&mut SkepMqttPlatform>,
-    mut commands: Commands,
-) {
-    let event = trigger.event().clone();
-    let mut mqtt_platform = query.get_mut(trigger.entity()).unwrap();
-
-    let ProcessDiscoveryPayload {
-        component,
-        object_id: discovery_id,
-        payload,
-    } = &trigger.event();
-    let discovery_hash = (component.to_string(), discovery_id.to_string());
-
-    if let Some(pending) = mqtt_platform
-        .discovery_pending_discovered
-        .get_mut(&discovery_hash)
-    {
-        pending.pending.push_front(payload.clone());
-        debug!(
-            "Component has already been discovered: {} {}, queuing update",
-            component, discovery_id,
-        );
-        return;
-    }
-
-    trace!("Process discovery payload {:?}", payload);
-
-    let already_discovered = mqtt_platform
-        .discovery_already_discovered
-        .contains(&discovery_hash);
-    if (already_discovered || !payload.is_empty())
-        && !mqtt_platform
-            .discovery_pending_discovered
-            .contains_key(&discovery_hash)
-    {
-        mqtt_platform.discovery_pending_discovered.insert(
-            discovery_hash.clone(),
-            PendingDiscovered::new(VecDeque::new()),
-        );
-    }
-
-    if !mqtt_platform.platforms_loaded.contains(component) {
-        debug!("{:?} waiting setup ", discovery_hash);
-        // if let Ok(Some(device_info)) = device_info_from_payload(payload.clone()) {}
-        commands.trigger_targets(
-            SetupConfigEntry {
-                component: event.component,
-                object_id: event.object_id,
-                payload: event.payload.into(),
-            },
-            vec![trigger.entity()],
-        );
-    }
 }

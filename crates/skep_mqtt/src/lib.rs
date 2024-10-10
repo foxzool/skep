@@ -3,7 +3,7 @@ use crate::{
     constants::DOMAIN,
     discovery::{
         on_discovery_message_received, process_discovery_payload, sub_default_topic,
-        ProcessDiscoveryPayload,
+        MQTTDiscoveryHash, MQTTDiscoveryPayload, ProcessDiscoveryPayload,
     },
     sensor::MqttSensorPlugin,
 };
@@ -12,14 +12,14 @@ use bevy_ecs::prelude::*;
 use bevy_mqtt::{rumqttc, MqttClientError, MqttConnectError, MqttPlugin, MqttSetting};
 use bevy_reflect::Reflect;
 use bevy_state::app::StatesPlugin;
-use bevy_utils::HashSet;
+use bevy_utils::{HashMap, HashSet};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use skep_core::{
     integration::Integration, loader::LoadConfig, platform::Platform, typing::ConfigType,
     CallbackType,
 };
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 mod abbreviations;
 mod binary_sensor;
@@ -42,6 +42,7 @@ impl Plugin for SkepMqttPlugin {
 
         app.add_plugins(MqttPlugin)
             .register_type::<SkepMqttPlatform>()
+            .register_type::<MQTTDiscoveryHash>()
             .register_type::<HashSet<(String, String)>>()
             .add_event::<ProcessDiscoveryPayload>()
             .add_systems(Startup, setup)
@@ -50,12 +51,12 @@ impl Plugin for SkepMqttPlugin {
                 (
                     sub_default_topic,
                     on_discovery_message_received,
+                    process_discovery_payload,
                     handle_error,
                 ),
             )
             .add_plugins((MqttSensorPlugin, MqttBinarySensorPlugin))
-            .observe(reload_config)
-            .observe(process_discovery_payload);
+            .observe(reload_config);
     }
 }
 
@@ -80,9 +81,9 @@ pub(crate) struct SkepMqttPlatform {
     pub(crate) last_discovery: chrono::DateTime<chrono::Utc>,
     /// default discovery prefix topic: homeassistant
     pub discovery_prefix: String,
-    pub discovery_already_discovered: HashSet<(String, String)>,
+    pub discovery_already_discovered: HashSet<MQTTDiscoveryHash>,
     #[reflect(ignore)]
-    pub discovery_pending_discovered: HashMap<(String, String), PendingDiscovered>,
+    pub discovery_pending_discovered: HashMap<MQTTDiscoveryHash, PendingDiscovered>,
     #[reflect(ignore)]
     pub discovery_registry_hooks: HashMap<(String, String), CallbackType>,
     pub platforms_loaded: HashSet<String>,
@@ -106,11 +107,11 @@ impl Default for SkepMqttPlatform {
 
 #[derive(Debug)]
 pub struct PendingDiscovered {
-    pub pending: VecDeque<Map<String, Value>>,
+    pub pending: VecDeque<HashMap<String, Value>>,
 }
 
 impl PendingDiscovered {
-    pub fn new(pending: VecDeque<Map<String, Value>>) -> Self {
+    pub fn new(pending: VecDeque<HashMap<String, Value>>) -> Self {
         Self { pending }
     }
 }

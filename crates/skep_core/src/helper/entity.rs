@@ -40,9 +40,30 @@ pub struct SkepEntityComponent {
 impl Default for SkepEntityComponent {
     fn default() -> Self {
         SkepEntityComponent {
+            entity_id: None,
+            entity_description: Default::default(),
+            assumed_state: false,
+            attribution: None,
+            available: false,
+            capability_attributes: None,
+            device_class: None,
+            device_info: None,
+            entity_category: None,
+            has_entity_name: false,
+            entity_picture: None,
             entity_registry_enabled_default: true,
+            entity_registry_visible_default: false,
+            extra_state_attributes: Default::default(),
+            force_update: false,
+            icon: None,
+            name: None,
             should_poll: true,
-            ..Default::default()
+            state: None,
+            supported_features: None,
+            translation_key: None,
+            translation_placeholders: Default::default(),
+            unique_id: None,
+            unit_of_measurement: None,
         }
     }
 }

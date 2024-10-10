@@ -1,10 +1,10 @@
 use crate::{
     entity::{MqttAttributesMixin, MqttDiscoveryUpdateMixin, MqttEntity, MqttEntityDeviceInfo},
     subscription::EntitySubscription,
-    DiscoveryInfoType,
+    DiscoveryInfoType, SkepMqttPlatform,
 };
-use bevy_app::{App, Plugin};
-use bevy_ecs::{component::Component, observer::Trigger};
+use bevy_app::{App, Plugin, Update};
+use bevy_ecs::prelude::*;
 use bevy_utils::HashMap;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -20,13 +20,20 @@ use skep_core::{
 };
 use skep_sensor::ENTITY_ID_FORMAT;
 
-use crate::{discovery::MQTTDiscoveryPayload, entity::MqttAvailabilityMixin};
+use crate::{
+    discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload, MQTTSupportComponent},
+    entity::MqttAvailabilityMixin,
+};
 use bevy_ecs::{
-    prelude::{Commands, In, ResMut, System},
+    prelude::{Added, Bundle, Commands, In, ResMut, System},
+    system::Query,
     world::CommandQueue,
 };
+use bevy_log::debug;
+use bevy_reflect::Reflect;
 use bytes::Bytes;
 use lazy_static::lazy_static;
+use log::warn;
 use std::collections::HashSet;
 
 lazy_static! {
@@ -42,7 +49,26 @@ pub struct MqttSensorPlugin;
 
 impl Plugin for MqttSensorPlugin {
     fn build(&self, app: &mut App) {
-        app.observe(on_setup_entry);
+        app.add_systems(Update, on_mqtt_platform_added)
+            .add_systems(Update, create_or_update_discovery_payload)
+            .observe(on_setup_entry);
+    }
+}
+
+#[derive(Bundle, Debug, Default)]
+struct MqttSensorBundle {
+    sensor: MqttSensorComponent,
+}
+
+impl MqttSensorBundle {
+    pub fn new(
+        skep_res: ResMut<SkepResource>,
+        config: ConfigType,
+        config_entry: ConfigEntry,
+        discovery_data: Option<DiscoveryInfoType>,
+    ) -> Self {
+        let sensor = MqttSensorComponent::new(skep_res, config, config_entry, discovery_data);
+        MqttSensorBundle { sensor }
     }
 }
 
@@ -315,5 +341,28 @@ fn on_setup_entry(
         let config_entry = ConfigEntry::default();
         let sensor = MqttSensorComponent::new(skep_res, config, config_entry, None);
         commands.spawn(sensor);
+    }
+}
+
+#[derive(Component, Reflect, Clone)]
+pub struct MqttSensorMarker;
+
+fn on_mqtt_platform_added(
+    mut commands: Commands,
+    mut q_platform: Query<&mut SkepMqttPlatform, (Added<SkepMqttPlatform>)>,
+) {
+    for mut platform in q_platform.iter_mut() {
+        // let ob = commands.spawn_empty().observe(on_setup_entry).id();
+        platform.platforms_loaded.insert(DOMAIN.to_string());
+    }
+}
+
+fn create_or_update_discovery_payload(
+    q_discovery: Query<(&MQTTDiscoveryHash, &MQTTDiscoveryPayload), Added<MQTTDiscoveryHash>>,
+) {
+    for (hash, payload) in q_discovery.iter() {
+        if hash.component == DOMAIN {
+            debug!("create_or_update_discovery_payload {:#?}", payload);
+        }
     }
 }
