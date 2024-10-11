@@ -36,8 +36,8 @@ fn check_delayed_action(
     mut query: Query<(Entity, &mut DelayedActions)>,
     mut commands: Commands,
 ) {
-    for (entity, mut actions) in query.iter_mut() {
-        actions.retain_mut(|mut delayed_action| {
+    for (_entity, mut actions) in query.iter_mut() {
+        actions.retain_mut(|delayed_action| {
             if delayed_action.timer.tick(time.delta()).just_finished() {
                 commands.append(&mut delayed_action.action);
             }

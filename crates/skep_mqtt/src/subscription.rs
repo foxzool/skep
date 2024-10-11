@@ -1,3 +1,19 @@
+use crate::discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload};
+use bevy_ecs::{
+    component::Component,
+    entity::Entity,
+    observer::Trigger,
+    prelude::{Added, Changed, Commands, Query},
+};
+use bevy_hierarchy::BuildChildren;
+use bevy_log::debug;
+use bevy_mqtt::{rumqttc::QoS, SubscribeTopic, TopicMessage};
+use bevy_reflect::Map;
+use bevy_utils::{HashMap, HashSet};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::process::Command;
+
 #[derive(Debug)]
 pub struct EntitySubscription {
     topic: Option<String>,
@@ -7,6 +23,12 @@ pub struct EntitySubscription {
     qos: i32,
     encoding: String,
     entity_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Eq, Hash, PartialEq, Clone)]
+pub struct MqttStateSubscription {
+    pub state_topic: String,
+    pub qos: Option<i32>,
 }
 
 impl EntitySubscription {
@@ -76,5 +98,52 @@ impl EntitySubscription {
 
         let other = other.unwrap();
         self.topic != other.topic || self.qos != other.qos || self.encoding != other.encoding
+    }
+}
+
+#[derive(Component, Debug, Default)]
+pub struct MqttEntitySubscriptionManager {
+    pub state_subs: HashMap<String, i32>,
+}
+
+pub(crate) fn add_state_subscription(
+    mut commands: Commands,
+    mut q_discovery: Query<
+        (
+            Entity,
+            &MQTTDiscoveryPayload,
+            &mut MqttEntitySubscriptionManager,
+        ),
+        Changed<MQTTDiscoveryPayload>,
+    >,
+) {
+    for (entity, payload, mut sub_manager) in q_discovery.iter_mut() {
+        if let Ok(sub) =
+            serde_json::from_value::<MqttStateSubscription>(Value::from(payload.payload.clone()))
+        {
+            debug!("subscription changed {:#?}", sub);
+
+            let qos = sub.qos.unwrap_or(0);
+            let state_topic = sub.state_topic.clone();
+            let old_qos = sub_manager.state_subs.get(&state_topic).copied();
+
+            if old_qos == Some(qos) {
+                continue;
+            }
+
+            sub_manager.state_subs.insert(state_topic.clone(), qos);
+            let sub_topic = SubscribeTopic::new(state_topic.clone(), qos);
+            let child_id = commands
+                .spawn(sub_topic)
+                .observe(move |topic_message: Trigger<TopicMessage>| {
+                    println!(
+                        "{} received: {:?}",
+                        state_topic,
+                        topic_message.event().payload
+                    );
+                })
+                .id();
+            commands.entity(entity).add_child(child_id);
+        }
     }
 }

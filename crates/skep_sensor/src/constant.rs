@@ -1,4 +1,7 @@
-use bevy_reflect::Reflect;
+use bevy_reflect::{
+    erased_serde::__private::serde::{Deserialize, Serialize},
+    Reflect,
+};
 use strum_macros::{Display, EnumString};
 
 pub const DOMAIN: &str = "sensor";
@@ -11,7 +14,8 @@ pub const ATTR_OPTIONS: &str = "options";
 
 pub const ENTITY_ID_FORMAT: &str = "sensor.{}";
 
-#[derive(Debug, EnumString, Display, PartialEq, Clone, Eq, Reflect)]
+#[derive(Debug, EnumString, Display, PartialEq, Clone, Eq, Reflect, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 #[strum(ascii_case_insensitive)]
 pub enum SensorDeviceClass {
@@ -151,8 +155,8 @@ mod test {
             SensorDeviceClass::Temperature
         );
         assert_eq!(
-            SensorDeviceClass::from_str("Temperature").unwrap(),
-            SensorDeviceClass::Temperature
+            SensorDeviceClass::from_str("signal_strength").unwrap(),
+            SensorDeviceClass::SignalStrength
         );
     }
 }

@@ -3,9 +3,10 @@ use crate::{
     constants::DOMAIN,
     discovery::{
         on_discovery_message_received, process_discovery_payload, sub_default_topic,
-        MQTTDiscoveryHash, MQTTDiscoveryPayload, ProcessDiscoveryPayload,
+        MQTTDiscoveryHash, MQTTDiscoveryPayload, MQTTSupportComponent, ProcessDiscoveryPayload,
     },
     sensor::MqttSensorPlugin,
+    subscription::add_state_subscription,
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -43,6 +44,7 @@ impl Plugin for SkepMqttPlugin {
         app.add_plugins(MqttPlugin)
             .register_type::<SkepMqttPlatform>()
             .register_type::<MQTTDiscoveryHash>()
+            .register_type::<MQTTSupportComponent>()
             .register_type::<HashSet<(String, String)>>()
             .add_event::<ProcessDiscoveryPayload>()
             .add_systems(Startup, setup)
@@ -53,6 +55,7 @@ impl Plugin for SkepMqttPlugin {
                     on_discovery_message_received,
                     process_discovery_payload,
                     handle_error,
+                    add_state_subscription,
                 ),
             )
             .add_plugins((MqttSensorPlugin, MqttBinarySensorPlugin))

@@ -2,10 +2,10 @@ use crate::{device::DeviceEntryType, typing::ConfigType};
 use bevy_ecs::event::Event;
 use bevy_utils::{HashMap, HashSet};
 use chrono::Utc;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Default, Clone, Deserialize, Event)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Event)]
 pub struct DeviceInfo {
     pub configuration_url: Option<String>,
     pub connections: Option<HashSet<(String, String)>>,

@@ -1,15 +1,11 @@
-use crate::{
-    helper::device_registry::DeviceInfo, integration::Integration, platform::Platform,
-    typing::ConfigType,
-};
+use crate::{helper::device_registry::DeviceInfo, integration::Integration, platform::Platform};
 use bevy_app::{App, Plugin};
 use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
-use bevy_utils::{tracing::debug, HashMap, HashSet};
+use bevy_utils::{tracing::debug, HashSet};
 use chrono::Utc;
-use serde::{Deserialize, Deserializer};
-use serde_json::Value;
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 pub(crate) struct SkepDevicePlugin;
@@ -133,7 +129,7 @@ pub enum DeviceEntryDisabler {
     User,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Reflect)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Reflect)]
 pub enum DeviceEntryType {
     #[default]
     Service,

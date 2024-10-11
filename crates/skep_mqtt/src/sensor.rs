@@ -18,11 +18,13 @@ use skep_core::{
     typing::{ConfigType, SetupConfigEntry, StateType},
     CallbackType, SkepResource,
 };
-use skep_sensor::ENTITY_ID_FORMAT;
+use skep_sensor::{SensorDeviceClass, ENTITY_ID_FORMAT};
 
 use crate::{
+    binary_sensor::MqttBinarySensorConfiguration,
     discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload, MQTTSupportComponent},
     entity::MqttAvailabilityMixin,
+    subscription::MqttStateSubscription,
 };
 use bevy_ecs::{
     prelude::{Added, Bundle, Commands, In, ResMut, System},
@@ -34,6 +36,7 @@ use bevy_reflect::Reflect;
 use bytes::Bytes;
 use lazy_static::lazy_static;
 use log::warn;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 lazy_static! {
@@ -358,11 +361,77 @@ fn on_mqtt_platform_added(
 }
 
 fn create_or_update_discovery_payload(
-    q_discovery: Query<(&MQTTDiscoveryHash, &MQTTDiscoveryPayload), Added<MQTTDiscoveryHash>>,
+    mut commands: Commands,
+    q_discovery: Query<
+        (Entity, &MQTTDiscoveryHash, &MQTTDiscoveryPayload),
+        Added<MQTTDiscoveryPayload>,
+    >,
 ) {
-    for (hash, payload) in q_discovery.iter() {
+    for (entity, hash, payload) in q_discovery.iter() {
         if hash.component == DOMAIN {
-            debug!("create_or_update_discovery_payload {:#?}", payload);
+            // debug!("create_or_update_discovery_payload {:#?}", payload);
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MqttSensorConfiguration {
+    pub availability_topic: Option<String>,
+    pub device: Option<DeviceInfo>,
+    pub device_class: Option<SensorDeviceClass>,
+    /// Flag which defines if the entity should be enabled when first added.
+    pub enabled_by_default: Option<bool>,
+    /// The category of the entity. When set, the entity category must be diagnostic for sensors.
+    pub entity_category: Option<EntityCategory>,
+    /// If set, it defines the number of seconds after the sensor’s state expires, if it’s not
+    /// updated. After expiry, the sensor’s state becomes unavailable. Default the sensors state
+    /// never expires.
+    pub expire_after: Option<i32>,
+    pub force_update: Option<bool>,
+    pub icon: Option<String>,
+    pub json_attributes_template: Option<String>,
+    pub json_attributes_topic: Option<String>,
+    pub last_reset_value_template: Option<String>,
+    pub name: Option<String>,
+    pub object_id: Option<String>,
+    pub options: Option<Value>,
+    pub payload_available: Option<String>,
+    pub payload_not_available: Option<String>,
+    pub suggested_display_precision: Option<i32>,
+    pub state_topic: String,
+    pub unique_id: Option<String>,
+    pub unit_of_measurement: Option<String>,
+    pub value_template: Option<String>,
+}
+
+#[test]
+fn test_mqtt_configuration() {
+    let json = r#"
+    {
+    "availability_topic": "watermeter/connection",
+    "device":  {
+        "configuration_url": "http://192.168.1.51",
+        "identifiers": [
+            "watermeter"
+        ],
+        "manufacturer": "AI on the Edge Device",
+        "model": "Meter Digitizer",
+        "name": "watermeter",
+        "sw_version": "v15.7.0"
+    },
+    "device_class": "signal_strength",
+    "entity_category": "diagnostic",
+    "icon": "mdi:wifi",
+    "name": "Wi-Fi RSSI",
+    "object_id": "watermeter_wifiRSSI",
+    "payload_available": "connected",
+    "payload_not_available": "connection lost",
+    "state_topic": "watermeter/wifiRSSI",
+    "unique_id": "watermeter-wifiRSSI",
+    "unit_of_measurement": "dBm"
+}
+    "#;
+    let sensor: MqttSensorConfiguration = serde_json::from_str(json).unwrap();
+
+    println!("{:#?}", sensor);
 }

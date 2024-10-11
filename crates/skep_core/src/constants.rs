@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
 pub const DEVICE_DEFAULT_NAME: &str = "Unnamed Device";
@@ -227,7 +228,8 @@ pub const STATE_UNAVAILABLE: &str = "unavailable";
 pub const STATE_OK: &str = "ok";
 pub const STATE_PROBLEM: &str = "problem";
 
-#[derive(Debug, EnumString, Display, Clone)]
+#[derive(Debug, EnumString, Display, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 #[strum(ascii_case_insensitive)]
 pub enum EntityCategory {

@@ -10,6 +10,7 @@ use bevy_mqtt::{
     MqttClient, MqttClientConnected, MqttPublishPacket,
 };
 
+use crate::subscription::MqttEntitySubscriptionManager;
 use bevy_core::Name;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
@@ -77,7 +78,8 @@ impl Component for MQTTDiscoveryHash {
 
 #[derive(Debug, Component)]
 pub struct MQTTDiscoveryPayload {
-    pub payload: HashMap<String, Value>,
+    pub topic: String,
+    pub payload: Map<String, Value>,
 }
 
 /// Subscribe to default topic
@@ -177,11 +179,18 @@ pub(crate) fn on_discovery_message_received(
     }
 }
 
+#[derive(Debug, Bundle)]
+struct DiscoveryBundle {
+    discovery_hash: MQTTDiscoveryHash,
+    discovery_payload: MQTTDiscoveryPayload,
+    mqtt_entity_subscription_manager: MqttEntitySubscriptionManager,
+}
+
 fn handle_discovery_message(
     // mut mqtt_res: ResMut<MqttResource>,
     topic: &str,
     payload: &[u8],
-) -> anyhow::Result<Option<(MQTTDiscoveryHash, MQTTDiscoveryPayload)>> {
+) -> anyhow::Result<Option<DiscoveryBundle>> {
     let (component, node_id, object_id) = parse_topic_config(topic)?;
 
     let mut discovery_payload = match serde_json::from_slice::<Value>(payload) {
@@ -197,6 +206,8 @@ fn handle_discovery_message(
 
             if discovery_payload.contains_key(TOPIC_BASE) {
                 replace_topic_base(&mut discovery_payload);
+
+                println!("discovery_payload: {:#?}", discovery_payload);
             }
 
             discovery_payload
@@ -209,27 +220,29 @@ fn handle_discovery_message(
     } else {
         object_id.clone()
     };
-    let discovery_hash = (component.to_string(), discovery_id.clone());
+    // let discovery_hash = (component.to_string(), discovery_id.clone());
 
-    if !discovery_payload.is_empty() {
-        let discovery_data = json!({
-            "discovery_hash": discovery_hash,
-            "discovery_topic": topic,
-            "discovery_payload": serde_json::from_slice::<Value>(payload)?,
-        });
-        discovery_payload.insert("discovery_data".to_string(), discovery_data);
-        discovery_payload.insert("platform".to_string(), Value::String("mqtt".to_string()));
-    }
+    // if !discovery_payload.is_empty() {
+    //     let discovery_data = json!({
+    //         "discovery_hash": discovery_hash,
+    //         "discovery_topic": topic,
+    //         "discovery_payload": serde_json::from_slice::<Value>(payload)?,
+    //     });
+    //     discovery_payload.insert("discovery_data".to_string(), discovery_data);
+    //     discovery_payload.insert("platform".to_string(), Value::String("mqtt".to_string()));
+    // }
 
-    Ok(Some((
-        MQTTDiscoveryHash {
+    Ok(Some(DiscoveryBundle {
+        discovery_hash: MQTTDiscoveryHash {
             component,
             discovery_id,
         },
-        MQTTDiscoveryPayload {
-            payload: discovery_payload.into_iter().collect(),
+        discovery_payload: MQTTDiscoveryPayload {
+            topic: topic.to_string(),
+            payload: discovery_payload,
         },
-    )))
+        mqtt_entity_subscription_manager: MqttEntitySubscriptionManager::default(),
+    }))
 }
 
 // Replace all abbreviations in the payload
