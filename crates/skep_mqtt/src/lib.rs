@@ -6,7 +6,7 @@ use crate::{
         MQTTDiscoveryHash, MQTTDiscoveryPayload, MQTTSupportComponent, ProcessDiscoveryPayload,
     },
     sensor::MqttSensorPlugin,
-    subscription::add_state_subscription,
+    subscription::{add_state_subscription, MQTTStateSubscription},
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -45,6 +45,7 @@ impl Plugin for SkepMqttPlugin {
             .register_type::<SkepMqttPlatform>()
             .register_type::<MQTTDiscoveryHash>()
             .register_type::<MQTTSupportComponent>()
+            .register_type::<MQTTStateSubscription>()
             .register_type::<HashSet<(String, String)>>()
             .add_event::<ProcessDiscoveryPayload>()
             .add_systems(Startup, setup)

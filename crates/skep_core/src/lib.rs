@@ -23,6 +23,7 @@ pub mod integration;
 pub mod loader;
 pub mod platform;
 pub mod states;
+pub mod template;
 pub mod typing;
 
 pub struct SkepCorePlugin;

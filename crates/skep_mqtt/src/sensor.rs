@@ -24,7 +24,7 @@ use crate::{
     binary_sensor::MqttBinarySensorConfiguration,
     discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload, MQTTSupportComponent},
     entity::MqttAvailabilityMixin,
-    subscription::MqttStateSubscription,
+    subscription::MQTTStateSubscription,
 };
 use bevy_ecs::{
     prelude::{Added, Bundle, Commands, In, ResMut, System},
@@ -369,7 +369,11 @@ fn create_or_update_discovery_payload(
 ) {
     for (entity, hash, payload) in q_discovery.iter() {
         if hash.component == DOMAIN {
-            // debug!("create_or_update_discovery_payload {:#?}", payload);
+            if let Ok(mqtt_sensor_configuration) = serde_json::from_value::<MqttSensorConfiguration>(
+                Value::from(payload.payload.clone()),
+            ) {
+                debug!("mqtt_sensor_configuration {:#?}", mqtt_sensor_configuration);
+            }
         }
     }
 }

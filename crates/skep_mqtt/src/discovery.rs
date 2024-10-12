@@ -10,7 +10,7 @@ use bevy_mqtt::{
     MqttClient, MqttClientConnected, MqttPublishPacket,
 };
 
-use crate::subscription::MqttEntitySubscriptionManager;
+use crate::{entity::MQTTRenderTemplate, subscription::MQTTStateSubscription};
 use bevy_core::Name;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
@@ -179,11 +179,11 @@ pub(crate) fn on_discovery_message_received(
     }
 }
 
-#[derive(Debug, Bundle)]
+#[derive(Bundle)]
 struct DiscoveryBundle {
     discovery_hash: MQTTDiscoveryHash,
     discovery_payload: MQTTDiscoveryPayload,
-    mqtt_entity_subscription_manager: MqttEntitySubscriptionManager,
+    state_subscription: MQTTStateSubscription,
 }
 
 fn handle_discovery_message(
@@ -206,8 +206,6 @@ fn handle_discovery_message(
 
             if discovery_payload.contains_key(TOPIC_BASE) {
                 replace_topic_base(&mut discovery_payload);
-
-                println!("discovery_payload: {:#?}", discovery_payload);
             }
 
             discovery_payload
@@ -220,17 +218,9 @@ fn handle_discovery_message(
     } else {
         object_id.clone()
     };
-    // let discovery_hash = (component.to_string(), discovery_id.clone());
 
-    // if !discovery_payload.is_empty() {
-    //     let discovery_data = json!({
-    //         "discovery_hash": discovery_hash,
-    //         "discovery_topic": topic,
-    //         "discovery_payload": serde_json::from_slice::<Value>(payload)?,
-    //     });
-    //     discovery_payload.insert("discovery_data".to_string(), discovery_data);
-    //     discovery_payload.insert("platform".to_string(), Value::String("mqtt".to_string()));
-    // }
+    let state_subscription =
+        serde_json::from_value::<MQTTStateSubscription>(Value::from(discovery_payload.clone()))?;
 
     Ok(Some(DiscoveryBundle {
         discovery_hash: MQTTDiscoveryHash {
@@ -241,7 +231,7 @@ fn handle_discovery_message(
             topic: topic.to_string(),
             payload: discovery_payload,
         },
-        mqtt_entity_subscription_manager: MqttEntitySubscriptionManager::default(),
+        state_subscription,
     }))
 }
 

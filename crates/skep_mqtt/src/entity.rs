@@ -9,8 +9,14 @@ use crate::{
     subscription::EntitySubscription,
     DiscoveryInfoType,
 };
-use bevy_ecs::prelude::{In, ResMut, System};
+use bevy_derive::{Deref, DerefMut};
+use bevy_ecs::{
+    component::Component,
+    prelude::{In, ResMut, System},
+};
 use bevy_utils::HashMap;
+use minijinja::{Environment, Template};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use skep_core::{
     config_entry::ConfigEntry,
@@ -22,7 +28,10 @@ use skep_core::{
     typing::ConfigType,
     CallbackType, SkepResource,
 };
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Debug, Default)]
 pub struct MqttEntityComponent {
@@ -352,3 +361,6 @@ name must be included in each entity's device configuration",
         Ok(())
     }
 }
+
+#[derive(Component, Default, Deref, DerefMut)]
+pub struct MQTTRenderTemplate<'a>(pub Arc<RwLock<Environment<'a>>>);
