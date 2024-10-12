@@ -10,11 +10,15 @@ use bevy_mqtt::{
     MqttClient, MqttClientConnected, MqttPublishPacket,
 };
 
-use crate::{entity::MQTTRenderTemplate, subscription::MQTTStateSubscription};
+use crate::{
+    entity::{Availability, MQTTAvailabilityConfiguration, MQTTRenderTemplate},
+    subscription::MQTTStateSubscription,
+};
 use bevy_core::Name;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
     component::{ComponentHooks, StorageType},
+    system::EntityCommands,
     world::DeferredWorld,
 };
 use bevy_hierarchy::{BuildChildren, Parent};
@@ -57,7 +61,7 @@ impl Component for MQTTDiscoveryHash {
     const STORAGE_TYPE: StorageType = StorageType::Table;
 
     fn register_component_hooks(hooks: &mut ComponentHooks) {
-        hooks.on_add(|mut world: DeferredWorld, entity, _component_id| {
+        hooks.on_insert(|mut world: DeferredWorld, entity, _component_id| {
             let discovery_hash = world.get::<MQTTDiscoveryHash>(entity).unwrap();
             let component_name = discovery_hash.component.clone();
             let name = Name::new(format!(
@@ -76,7 +80,7 @@ impl Component for MQTTDiscoveryHash {
     }
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Clone)]
 pub struct MQTTDiscoveryPayload {
     pub topic: String,
     pub payload: Map<String, Value>,
@@ -144,32 +148,37 @@ pub struct ProcessDiscoveryPayload {
     pub payload: HashMap<String, Value>,
 }
 
-pub(crate) fn on_discovery_message_received(
+pub(crate) fn on_mqtt_message_received(
     mut publish_ev: EventReader<MqttPublishPacket>,
     mut query: Query<&mut SkepMqttPlatform>,
     mut commands: Commands,
 ) {
     for packet in publish_ev.read() {
         if let Ok(mut mqtt_platform) = query.get_mut(packet.entity) {
-            trace!("topic: {} received : {:?}", packet.topic, packet.payload);
             mqtt_platform.last_discovery = chrono::Utc::now();
 
             let payload = packet.payload.clone();
             let topic = packet.topic.clone();
+            debug!("topic: {} received : {:?}", topic, payload.len());
             let topic_trimmed = topic.replacen(
                 format!("{}/", mqtt_platform.discovery_prefix).as_str(),
                 "",
                 1,
             );
-            match handle_discovery_message(&topic_trimmed, &payload) {
-                Ok(Some(discovery_bundle)) => {
-                    let child = commands.spawn(discovery_bundle).id();
-                    commands.entity(packet.entity).add_child(child);
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    if topic_trimmed.ends_with("config") {
-                        warn!("handle discovery message error: {:?}", e);
+
+            if parse_topic_config(&topic_trimmed).is_ok() {
+                if let Ok(discovery_payload) = handle_discovery_message(&payload) {
+                    match spawn_mqtt_entity(
+                        commands.spawn_empty(),
+                        &topic_trimmed,
+                        discovery_payload,
+                    ) {
+                        Ok(child) => {
+                            commands.entity(packet.entity).add_child(child);
+                        }
+                        Err(e) => {
+                            warn!("spawn mqtt entity error: {:?}", e);
+                        }
                     }
                 }
             }
@@ -180,20 +189,14 @@ pub(crate) fn on_discovery_message_received(
 }
 
 #[derive(Bundle)]
-struct DiscoveryBundle {
+struct DiscoveryDefaultBundle {
     discovery_hash: MQTTDiscoveryHash,
     discovery_payload: MQTTDiscoveryPayload,
     state_subscription: MQTTStateSubscription,
 }
 
-fn handle_discovery_message(
-    // mut mqtt_res: ResMut<MqttResource>,
-    topic: &str,
-    payload: &[u8],
-) -> anyhow::Result<Option<DiscoveryBundle>> {
-    let (component, node_id, object_id) = parse_topic_config(topic)?;
-
-    let mut discovery_payload = match serde_json::from_slice::<Value>(payload) {
+fn handle_discovery_message(payload: &[u8]) -> anyhow::Result<Map<String, Value>> {
+    let discovery_payload = match serde_json::from_slice::<Value>(payload) {
         Err(_) => serde_json::Map::new(),
         Ok(mut json_data) => {
             let mut discovery_payload = json_data
@@ -201,7 +204,7 @@ fn handle_discovery_message(
                 .ok_or_else(|| anyhow::anyhow!("Expected a JSON object"))?;
             replace_all_abbreviations(&mut discovery_payload)?;
             if !valid_origin_info(&discovery_payload) {
-                return Ok(None);
+                return Err(anyhow::anyhow!("Invalid origin info"));
             }
 
             if discovery_payload.contains_key(TOPIC_BASE) {
@@ -213,26 +216,45 @@ fn handle_discovery_message(
         .to_owned(),
     };
 
+    Ok(discovery_payload)
+}
+
+fn spawn_mqtt_entity(
+    mut commands: EntityCommands,
+    topic: &str,
+    discovery_payload: Map<String, Value>,
+) -> anyhow::Result<Entity> {
+    let (component, node_id, object_id) = parse_topic_config(topic)?;
+
     let discovery_id = if let Some(node_id) = node_id {
         format!("{} {}", node_id, object_id)
     } else {
         object_id.clone()
     };
+    let discovery_hash = MQTTDiscoveryHash {
+        component,
+        discovery_id,
+    };
 
     let state_subscription =
         serde_json::from_value::<MQTTStateSubscription>(Value::from(discovery_payload.clone()))?;
 
-    Ok(Some(DiscoveryBundle {
-        discovery_hash: MQTTDiscoveryHash {
-            component,
-            discovery_id,
-        },
-        discovery_payload: MQTTDiscoveryPayload {
-            topic: topic.to_string(),
-            payload: discovery_payload,
-        },
-        state_subscription,
-    }))
+    let discovery_payload = MQTTDiscoveryPayload {
+        topic: topic.to_string(),
+        payload: discovery_payload,
+    };
+    let availability = serde_json::from_value::<MQTTAvailabilityConfiguration>(Value::from(
+        discovery_payload.payload.clone(),
+    ))
+    .unwrap_or_default();
+
+    let cmds = commands
+        .insert((discovery_hash, state_subscription, availability))
+        .insert(discovery_payload.clone());
+
+    let id = cmds.id();
+
+    Ok(id)
 }
 
 // Replace all abbreviations in the payload
@@ -375,7 +397,6 @@ fn device_info_from_payload(payload: Map<String, Value>) -> anyhow::Result<Optio
 
 pub(crate) fn process_discovery_payload(
     mut query: Query<&mut SkepMqttPlatform>,
-    mut commands: Commands,
     mut added_discovery: Query<
         (&Parent, &MQTTDiscoveryHash, &MQTTDiscoveryPayload),
         Added<MQTTDiscoveryPayload>,
@@ -425,4 +446,12 @@ fn test_replace_base_topic() {
            "state_topic":"homeassistant/switch/irrigation/state"
         })
     );
+}
+
+#[test]
+fn test_availability() {
+    let mut json = json!({"availability_topic":"watermeter/connection","device":{"configuration_url":"http://192.168.1.51","identifiers":["watermeter"],"manufacturer":"AI on the Edge Device","model":"Meter Digitizer","name":"watermeter","sw_version":"v15.7.0"},"device_class":"problem","icon":"mdi:alert-outline","name":"Problem","object_id":"watermeter_problem","payload_available":"connected","payload_not_available":"connection lost","state_topic":"watermeter/main/error","unique_id":"watermeter-problem","value_template":"{{ 'OFF' if 'no error' in value else 'ON'}}"});
+
+    let availability =
+        serde_json::from_value::<MQTTAvailabilityConfiguration>(json.clone()).unwrap();
 }

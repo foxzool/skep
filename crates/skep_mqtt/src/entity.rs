@@ -14,6 +14,7 @@ use bevy_ecs::{
     component::Component,
     prelude::{In, ResMut, System},
 };
+use bevy_reflect::Reflect;
 use bevy_utils::HashMap;
 use minijinja::{Environment, Template};
 use serde::{Deserialize, Serialize};
@@ -364,3 +365,31 @@ name must be included in each entity's device configuration",
 
 #[derive(Component, Default, Deref, DerefMut)]
 pub struct MQTTRenderTemplate<'a>(pub Arc<RwLock<Environment<'a>>>);
+
+#[derive(Debug, Serialize, Deserialize, Component, Default, Reflect)]
+pub struct MQTTAvailabilityConfiguration {
+    pub availability: Option<Availability>,
+    pub availability_topic: Option<String>,
+    pub availability_template: Option<String>,
+    pub availability_mode: Option<String>,
+}
+
+impl MQTTAvailabilityConfiguration {
+    pub fn availability_topic(&self) -> &str {
+        match self.availability_topic {
+            Some(ref topic) => topic,
+            None => match self.availability {
+                Some(ref avail) => &avail.topic,
+                None => "",
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Reflect)]
+pub struct Availability {
+    pub payload_available: Option<String>,
+    pub payload_not_available: Option<String>,
+    pub topic: String,
+    pub value_template: Option<String>,
+}

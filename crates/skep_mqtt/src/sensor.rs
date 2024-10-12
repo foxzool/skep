@@ -372,7 +372,7 @@ fn create_or_update_discovery_payload(
             if let Ok(mqtt_sensor_configuration) = serde_json::from_value::<MqttSensorConfiguration>(
                 Value::from(payload.payload.clone()),
             ) {
-                debug!("mqtt_sensor_configuration {:#?}", mqtt_sensor_configuration);
+                // debug!("mqtt_sensor_configuration {:#?}", mqtt_sensor_configuration);
             }
         }
     }

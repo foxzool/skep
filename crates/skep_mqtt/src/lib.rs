@@ -2,11 +2,12 @@ use crate::{
     binary_sensor::MqttBinarySensorPlugin,
     constants::DOMAIN,
     discovery::{
-        on_discovery_message_received, process_discovery_payload, sub_default_topic,
-        MQTTDiscoveryHash, MQTTDiscoveryPayload, MQTTSupportComponent, ProcessDiscoveryPayload,
+        on_mqtt_message_received, process_discovery_payload, sub_default_topic, MQTTDiscoveryHash,
+        MQTTDiscoveryPayload, MQTTSupportComponent, ProcessDiscoveryPayload,
     },
+    entity::MQTTAvailabilityConfiguration,
     sensor::MqttSensorPlugin,
-    subscription::{add_state_subscription, MQTTStateSubscription},
+    subscription::{add_available_subscription, add_state_subscription, MQTTStateSubscription},
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -45,6 +46,7 @@ impl Plugin for SkepMqttPlugin {
             .register_type::<SkepMqttPlatform>()
             .register_type::<MQTTDiscoveryHash>()
             .register_type::<MQTTSupportComponent>()
+            .register_type::<MQTTAvailabilityConfiguration>()
             .register_type::<MQTTStateSubscription>()
             .register_type::<HashSet<(String, String)>>()
             .add_event::<ProcessDiscoveryPayload>()
@@ -53,10 +55,11 @@ impl Plugin for SkepMqttPlugin {
                 Update,
                 (
                     sub_default_topic,
-                    on_discovery_message_received,
+                    on_mqtt_message_received,
                     process_discovery_payload,
                     handle_error,
                     add_state_subscription,
+                    add_available_subscription,
                 ),
             )
             .add_plugins((MqttSensorPlugin, MqttBinarySensorPlugin))
