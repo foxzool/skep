@@ -208,8 +208,8 @@ fn handle_available_value(
     topic_message: Trigger<TopicMessage>,
     q_avail: Query<(&MQTTAvailabilityConfiguration, &Name)>,
 ) {
-    for ((available, name)) in q_avail.iter() {
-        if topic_message.event().topic == available.availability_topic() {
+    if let Ok((available, name)) = q_avail.get(topic_message.entity()) {
+        if !available.availability_topic().is_empty() {
             debug!(
                 "available_update '{}' {:?}: {:?}",
                 name,
