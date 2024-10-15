@@ -1,3 +1,5 @@
+use bevy_ecs::prelude::Component;
+use bevy_reflect::Reflect;
 use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString};
 
@@ -228,7 +230,7 @@ pub const STATE_UNAVAILABLE: &str = "unavailable";
 pub const STATE_OK: &str = "ok";
 pub const STATE_PROBLEM: &str = "problem";
 
-#[derive(Debug, EnumString, Display, Serialize, Deserialize, Clone)]
+#[derive(Debug, EnumString, Display, Serialize, Deserialize, Component, Clone, Reflect)]
 #[serde(rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 #[strum(ascii_case_insensitive)]

@@ -7,10 +7,7 @@ use crate::{
     },
     entity::{MQTTAvailability, MQTTAvailabilityConfiguration},
     sensor::MqttSensorPlugin,
-    subscription::{
-        add_state_subscription, update_available_subscription, update_subscription,
-        MQTTStateSubscription,
-    },
+    subscription::{add_state_subscription, update_available_subscription, MQTTStateSubscription},
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
@@ -63,7 +60,6 @@ impl Plugin for SkepMqttPlugin {
                     handle_error,
                     add_state_subscription,
                     update_available_subscription,
-                    update_subscription,
                 ),
             )
             .add_plugins((MqttSensorPlugin, MqttBinarySensorPlugin))

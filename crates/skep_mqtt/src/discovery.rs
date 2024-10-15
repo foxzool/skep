@@ -28,6 +28,7 @@ use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use skep_core::{
+    constants::EntityCategory,
     helper::{device_registry::DeviceInfo, entity::SkepEntityComponent},
     typing::SetupConfigEntry,
 };
@@ -219,6 +220,7 @@ fn handle_discovery_message(payload: &[u8]) -> anyhow::Result<Map<String, Value>
     Ok(discovery_payload)
 }
 
+/// Spawn a new MQTT entity from discovery payload
 fn spawn_mqtt_entity(
     mut commands: EntityCommands,
     topic: &str,
@@ -235,29 +237,44 @@ fn spawn_mqtt_entity(
         component,
         discovery_id,
     };
-
-    let state_subscription =
-        serde_json::from_value::<MQTTStateSubscription>(Value::from(discovery_payload.clone()))?;
+    println!("discovery_payload: {:?}", discovery_payload);
+    let components =
+        serde_json::from_value::<MQTTDiscoveryComponents>(Value::from(discovery_payload.clone()))?;
 
     let discovery_payload = MQTTDiscoveryPayload {
         topic: topic.to_string(),
         payload: discovery_payload,
     };
 
-    println!("discovery_payload: {:?}", discovery_payload);
-    let availability_config = serde_json::from_value::<MQTTAvailabilityConfiguration>(Value::from(
-        discovery_payload.payload.clone(),
-    ))
-    .unwrap_or_default();
-    let availability = MQTTAvailability::from_config(availability_config);
-
     let cmds = commands
-        .insert((discovery_hash, state_subscription, availability))
+        .insert((discovery_hash, components.state_subscription))
         .insert(discovery_payload.clone());
+
+    if let Some(availability_config) = components.availability_config {
+        let availability = MQTTAvailability::from_config(availability_config);
+
+        if !availability.topic.is_empty() {
+            cmds.insert(availability);
+        }
+    }
+
+    if let Some(entity_category) = components.entity_category {
+        cmds.insert(entity_category);
+    }
 
     let id = cmds.id();
 
     Ok(id)
+}
+
+#[derive(Deserialize)]
+struct MQTTDiscoveryComponents {
+    #[serde(flatten)]
+    state_subscription: MQTTStateSubscription,
+    #[serde(flatten)]
+    availability_config: Option<MQTTAvailabilityConfiguration>,
+    #[serde(flatten)]
+    entity_category: Option<EntityCategory>,
 }
 
 // Replace all abbreviations in the payload

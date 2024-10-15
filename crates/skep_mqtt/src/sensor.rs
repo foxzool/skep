@@ -23,7 +23,6 @@ use skep_sensor::{SensorDeviceClass, ENTITY_ID_FORMAT};
 use crate::{
     binary_sensor::MqttBinarySensorConfiguration,
     discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload, MQTTSupportComponent},
-    entity::MqttAvailabilityMixin,
     subscription::MQTTStateSubscription,
 };
 use bevy_ecs::{
@@ -298,24 +297,6 @@ impl MqttEntity for MqttSensorComponent {
     }
 }
 
-impl MqttAvailabilityMixin for MqttSensorComponent {
-    fn init_availability(&mut self, config: &ConfigType) {
-        self.availability_setup_from_config(config);
-    }
-
-    fn set_available_latest(&mut self, available: bool) {
-        self.available_latest = available;
-    }
-
-    fn set_avail_config(&mut self, config: ConfigType) {
-        self.avail_config = Some(config);
-    }
-
-    fn set_avail_topics(&mut self, avail_topics: HashMap<String, HashMap<String, Value>>) {
-        self.avail_topics = avail_topics;
-    }
-}
-
 impl MqttSensorComponent {
     pub fn new(
         skep_res: ResMut<SkepResource>,
@@ -326,7 +307,6 @@ impl MqttSensorComponent {
         let mut sensor = MqttSensorComponent::default();
         sensor.init_mqtt_entity(skep_res, &config, &config_entry, discovery_data.clone());
         sensor.init_attributes(config.clone());
-        sensor.init_availability(&config);
 
         sensor
     }

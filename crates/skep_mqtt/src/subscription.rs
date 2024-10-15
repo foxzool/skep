@@ -2,6 +2,7 @@ use crate::{
     discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload},
     entity::{MQTTAvailability, MQTTAvailabilityConfiguration},
 };
+use bevy_app::Update;
 use bevy_core::Name;
 use bevy_ecs::{
     component::Component,
@@ -152,52 +153,41 @@ pub(crate) fn update_available_subscription(
             Value::from(payload.payload.clone()),
         ) {
             avail.update_from_config(available_config);
-        }
-    }
-}
 
-pub(crate) fn update_subscription(
-    mut commands: Commands,
-    q_child: Query<&mut SubscribeTopic>,
-    mut q_available: Query<
-        (Entity, &MQTTAvailability, Option<&Children>),
-        Changed<MQTTAvailability>,
-    >,
-) {
-    for (entity, avail, opt_children) in q_available.iter() {
-        if let Some(children) = opt_children {
-            for avail_config in avail.topic.values() {
+            if let Some(children) = opt_children {
+                for avail_config in avail.topic.values() {
+                    for child in children {
+                        let child_id = *child;
+                        let child_topic = q_child.get(child_id).unwrap().topic();
+                        if child_topic == avail_config.topic {
+                            continue;
+                        }
+                        let sub_topic = SubscribeTopic::new(child_topic, 0);
+                        let child_id = commands.spawn(sub_topic).id();
+                        commands
+                            .entity(entity)
+                            .add_child(child_id)
+                            .observe(handle_available_value);
+                    }
+                }
+                // find need remove topic;
                 for child in children {
                     let child_id = *child;
-                    let child_topic = q_child.get(child_id).unwrap().topic();
-                    if child_topic == avail_config.topic {
-                        continue;
+                    if let Ok(child_topic) = q_child.get(child_id) {
+                        if !avail.topic.contains_key(child_topic.topic()) {
+                            commands.entity(child_id).despawn_recursive();
+                        }
                     }
-                    let sub_topic = SubscribeTopic::new(child_topic, 0);
+                }
+            } else {
+                for avail_config in avail.topic.values() {
+                    let sub_topic = SubscribeTopic::new(&avail_config.topic, 0);
                     let child_id = commands.spawn(sub_topic).id();
                     commands
                         .entity(entity)
                         .add_child(child_id)
                         .observe(handle_available_value);
                 }
-            }
-            // find need remove topic;
-            for child in children {
-                let child_id = *child;
-                if let Ok(child_topic) = q_child.get(child_id) {
-                    if !avail.topic.contains_key(child_topic.topic()) {
-                        commands.entity(child_id).despawn_recursive();
-                    }
-                }
-            }
-        } else {
-            for avail_config in avail.topic.values() {
-                let sub_topic = SubscribeTopic::new(&avail_config.topic, 0);
-                let child_id = commands.spawn(sub_topic).id();
-                commands
-                    .entity(entity)
-                    .add_child(child_id)
-                    .observe(handle_available_value);
             }
         }
     }
@@ -242,12 +232,22 @@ fn try_render_template(
 
 fn handle_available_value(
     topic_message: Trigger<TopicMessage>,
-    q_avail: Query<(&MQTTAvailability, &Name)>,
+    mut q_avail: Query<(&mut MQTTAvailability, &Name)>,
 ) {
-    if let Ok((available, name)) = q_avail.get(topic_message.entity()) {
+    if let Ok((mut available, name)) = q_avail.get_mut(topic_message.entity()) {
         let update_status = try_render_available(&available, &topic_message.event()).ok();
-
-        debug!("{} status: {:?}", name, update_status);
+        if let Some(update_status) = update_status {
+            available
+                .avail_topics
+                .insert(topic_message.event().topic.clone(), update_status);
+            available.available_latest = update_status;
+            debug!(
+                "{} {} status: {:?}",
+                name,
+                topic_message.event().topic.clone(),
+                update_status
+            );
+        }
     }
 }
 

@@ -14,7 +14,7 @@ use bevy_ecs::{
     component::Component,
     prelude::{In, ResMut, System},
 };
-use bevy_reflect::Reflect;
+use bevy_reflect::{Reflect, ReflectDeserialize, ReflectSerialize};
 use bevy_utils::HashMap;
 use minijinja::{Environment, Template};
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,7 @@ use skep_core::{
     CallbackType, SkepResource,
 };
 use std::{
+    cmp::PartialEq,
     str::FromStr,
     sync::{Arc, RwLock},
 };
@@ -370,7 +371,7 @@ pub struct MQTTAvailabilityConfiguration {
     pub availability: Option<Vec<AvailabilityConfig>>,
     pub availability_topic: Option<String>,
     pub availability_template: Option<String>,
-    pub availability_mode: Option<String>,
+    pub availability_mode: Option<MQTTAvailabilityMode>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Reflect)]
@@ -391,14 +392,37 @@ impl AvailabilityConfig {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Default, Reflect)]
+#[reflect(PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MQTTAvailabilityMode {
+    All,
+    Any,
+    #[default]
+    Latest,
+}
+
 #[derive(Debug, Serialize, Deserialize, Component, Default, Reflect)]
 pub struct MQTTAvailability {
     pub topic: HashMap<String, AvailabilityConfig>,
     pub avail_topics: HashMap<String, bool>,
     pub available_latest: bool,
+    pub availability_model: MQTTAvailabilityMode,
 }
 
 impl MQTTAvailability {
+    pub fn available(&self) -> bool {
+        if self.avail_topics.is_empty() {
+            true
+        } else if self.availability_model == MQTTAvailabilityMode::All {
+            self.avail_topics.values().all(|v| *v)
+        } else if self.availability_model == MQTTAvailabilityMode::Any {
+            self.avail_topics.values().any(|v| *v)
+        } else {
+            self.available_latest
+        }
+    }
+
     pub fn from_config(config: MQTTAvailabilityConfiguration) -> Self {
         let mut topic = HashMap::new();
         if let Some(availability_topic) = config.availability_topic {
@@ -423,18 +447,19 @@ impl MQTTAvailability {
             }
         }
 
-        if !topic.is_empty() {
-            println!("avail topic {:#?} ", topic);
-        }
-
         Self {
             topic,
             avail_topics: Default::default(),
             available_latest: false,
+            availability_model: config.availability_mode.unwrap_or_default(),
         }
     }
 
     pub fn update_from_config(&mut self, update_config: MQTTAvailabilityConfiguration) {
+        if let Some(mode) = update_config.availability_mode {
+            self.availability_model = mode;
+        }
+
         self.topic.clear();
         if let Some(availability_topic) = update_config.availability_topic {
             let avail_config = AvailabilityConfig {

@@ -1,7 +1,12 @@
 use crate::{
-    constants::DEVICE_DEFAULT_NAME, device::SkepDevicePlugin, domain::Domain,
-    entity::SkepEntityPlugin, helper::event::SkepCoreEventPlugin, integration::Integration,
-    loader::load_config_toml, platform::Platform,
+    constants::{EntityCategory, DEVICE_DEFAULT_NAME},
+    device::SkepDevicePlugin,
+    domain::Domain,
+    entity::SkepEntityPlugin,
+    helper::event::SkepCoreEventPlugin,
+    integration::Integration,
+    loader::load_config_toml,
+    platform::Platform,
 };
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::{
@@ -35,6 +40,7 @@ impl Plugin for SkepCorePlugin {
             .register_type::<Platform>()
             .register_type::<Domain>()
             .register_type::<SkepResource>()
+            .register_type::<EntityCategory>()
             .init_resource::<SkepResource>()
             // .register_type::<DeviceEntry>()
             .add_systems(Startup, load_config_toml);
