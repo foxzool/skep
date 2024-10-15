@@ -277,15 +277,15 @@ fn try_render_available(
             None => status_str,
         };
 
-        let available = if payload_available_str == match_value {
-            true
+        return if payload_available_str == match_value {
+            Ok(true)
         } else if payload_not_available_str == match_value {
-            false
+            Ok(false)
         } else {
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "Invalid availability template: {}",
                 match_value
-            ));
+            ))
         };
     }
 

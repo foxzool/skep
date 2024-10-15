@@ -88,6 +88,7 @@ pub(crate) struct SkepMqttPlatform {
     pub(crate) last_discovery: chrono::DateTime<chrono::Utc>,
     /// default discovery prefix topic: homeassistant
     pub discovery_prefix: String,
+    pub discovered: HashMap<MQTTDiscoveryHash, Entity>,
     pub discovery_already_discovered: HashSet<MQTTDiscoveryHash>,
     #[reflect(ignore)]
     pub discovery_pending_discovered: HashMap<MQTTDiscoveryHash, PendingDiscovered>,
@@ -103,6 +104,7 @@ impl Default for SkepMqttPlatform {
         Self {
             last_discovery: Default::default(),
             discovery_prefix: "homeassistant".to_string(),
+            discovered: Default::default(),
             discovery_already_discovered: Default::default(),
             discovery_pending_discovered: Default::default(),
             discovery_registry_hooks: Default::default(),
