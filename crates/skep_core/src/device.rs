@@ -1,5 +1,5 @@
 use crate::{helper::device_registry::DeviceInfo, integration::Integration, platform::Platform};
-use bevy_app::{App, Plugin};
+use bevy_app::{App, Plugin, Update};
 use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use bevy_reflect::Reflect;
@@ -13,7 +13,8 @@ pub(crate) struct SkepDevicePlugin;
 impl Plugin for SkepDevicePlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<DeviceEntry>()
-            .observe(device_create_or_update);
+            .register_type::<DeviceInfo>()
+            .add_systems(Update, device_create_or_update);
     }
 }
 
@@ -203,43 +204,16 @@ impl From<DeviceInfo> for DeviceEntry {
 }
 
 pub(crate) fn device_create_or_update(
-    trigger: Trigger<DeviceInfo>,
     mut commands: Commands,
-    platform_query: Query<(&Integration, &Platform), Without<DeviceEntry>>,
-    mut full_device_query: Query<(&Integration, &Platform, &mut DeviceEntry)>,
-    mut raw_device_query: Query<&mut DeviceEntry, (Without<Integration>, Without<Platform>)>,
+    mut q_device: Query<(Entity, &DeviceInfo, Option<&mut DeviceEntry>), Added<DeviceInfo>>,
 ) {
-    let device_info = trigger.event().clone();
-
-    let device_entry = DeviceEntry::from(device_info.clone());
-    debug!("spawn device_entry {:?}", device_entry);
-    if let Ok((parent_integration, parent_platform)) = platform_query.get(trigger.entity()) {
-        // has integration and platform
-        for (integration, platform, mut device_entry) in full_device_query.iter_mut() {
-            if parent_integration == integration
-                && parent_platform == platform
-                && device_entry.device_info() == device_info
-            {
-                device_entry.update_from_device_info(device_info);
-                return;
-            }
+    for (entity, device_info, device_entry) in q_device.iter_mut() {
+        if let Some(mut device_entry) = device_entry {
+            device_entry.update_from_device_info(device_info.clone());
+        } else {
+            let device_entry = DeviceEntry::from(device_info.clone());
+            debug!("create device entry: {:?}", device_entry);
+            commands.entity(entity).insert(device_entry);
         }
-
-        commands.spawn((
-            Name::new(device_entry.name().to_string()),
-            device_entry,
-            parent_platform.clone(),
-            parent_integration.clone(),
-        ));
-    } else {
-        // no integration and platform
-        for mut device_entry in raw_device_query.iter_mut() {
-            if device_entry.device_info() == device_info {
-                device_entry.update_from_device_info(device_info);
-                return;
-            }
-        }
-
-        commands.spawn((Name::new(device_entry.name().to_string()), device_entry));
     }
 }

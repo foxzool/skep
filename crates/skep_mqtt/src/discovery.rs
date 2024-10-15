@@ -29,6 +29,7 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use skep_core::{
     constants::EntityCategory,
+    device::DeviceEntry,
     helper::{device_registry::DeviceInfo, entity::SkepEntityComponent},
     typing::SetupConfigEntry,
 };
@@ -199,6 +200,7 @@ pub(crate) fn on_mqtt_message_received(
                                 is_new = true;
                                 let id = commands.spawn_empty().id();
                                 commands.entity(packet.entity).add_child(id);
+                                mqtt_platform.discovered.insert(discovery_hash.clone(), id);
                                 id
                             };
 
@@ -263,6 +265,10 @@ fn spawn_or_update_components(cmds: &mut EntityCommands, components: MQTTDiscove
     if let Some(entity_category) = components.entity_category {
         cmds.insert(entity_category);
     }
+
+    if let Some(device_info) = components.device {
+        cmds.insert(device_info);
+    }
 }
 
 #[derive(Deserialize)]
@@ -273,6 +279,7 @@ struct MQTTDiscoveryComponents {
     availability_config: Option<MQTTAvailabilityConfiguration>,
     #[serde(flatten)]
     entity_category: Option<EntityCategory>,
+    device: Option<DeviceInfo>,
 }
 
 // Replace all abbreviations in the payload
@@ -410,38 +417,6 @@ fn device_info_from_payload(payload: Map<String, Value>) -> anyhow::Result<Optio
         None => Ok(None),
         Some(device_value) => serde_json::from_value(device_value)
             .with_context(|| "Failed to deserialize device info"),
-    }
-}
-
-pub(crate) fn process_discovery_payload(
-    mut query: Query<&mut SkepMqttPlatform>,
-    mut added_discovery: Query<
-        (&Parent, &MQTTDiscoveryHash, &MQTTDiscoveryPayload),
-        Added<MQTTDiscoveryPayload>,
-    >,
-) {
-    return;
-    for (parent, discovery_hash, payload) in added_discovery.iter() {
-        let mut mqtt_platform = query.get_mut(parent.get()).unwrap();
-        let component = discovery_hash.component.clone();
-        trace!("Process discovery payload {:?}", payload);
-
-        if let Some(entity) = mqtt_platform.platforms_loaded.get(&component) {
-            if mqtt_platform
-                .discovery_already_discovered
-                .insert(discovery_hash.clone())
-            {
-                debug!("Component discovered: {}", discovery_hash);
-            } else {
-                debug!(
-                    "Component has already been discovered: {}, queuing update",
-                    discovery_hash
-                );
-            }
-        } else {
-            warn!("Component Handler not loaded: {}", component);
-            return;
-        }
     }
 }
 

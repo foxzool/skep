@@ -2,8 +2,8 @@ use crate::{
     binary_sensor::MqttBinarySensorPlugin,
     constants::DOMAIN,
     discovery::{
-        on_mqtt_message_received, process_discovery_payload, sub_default_topic, MQTTDiscoveryHash,
-        MQTTDiscoveryPayload, MQTTSupportComponent, ProcessDiscoveryPayload,
+        on_mqtt_message_received, sub_default_topic, MQTTDiscoveryHash, MQTTDiscoveryPayload,
+        MQTTSupportComponent, ProcessDiscoveryPayload,
     },
     entity::{MQTTAvailability, MQTTAvailabilityConfiguration},
     sensor::MqttSensorPlugin,
@@ -56,7 +56,6 @@ impl Plugin for SkepMqttPlugin {
                 (
                     sub_default_topic,
                     on_mqtt_message_received,
-                    process_discovery_payload,
                     handle_error,
                     add_state_subscription,
                     update_available_subscription,

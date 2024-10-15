@@ -1,11 +1,12 @@
 use crate::{device::DeviceEntryType, typing::ConfigType};
-use bevy_ecs::event::Event;
+use bevy_ecs::prelude::Component;
+use bevy_reflect::Reflect;
 use bevy_utils::{HashMap, HashSet};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Event)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Component, Reflect)]
 pub struct DeviceInfo {
     pub configuration_url: Option<String>,
     pub connections: Option<HashSet<(String, String)>>,
@@ -18,6 +19,7 @@ pub struct DeviceInfo {
     pub manufacturer: Option<String>,
     pub model: Option<String>,
     pub model_id: Option<String>,
+    #[reflect(ignore)]
     pub modified_at: Option<chrono::DateTime<Utc>>,
     pub name: Option<String>,
     pub serial_number: Option<String>,
