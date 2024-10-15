@@ -363,33 +363,99 @@ name must be included in each entity's device configuration",
     }
 }
 
-#[derive(Component, Default, Deref, DerefMut)]
-pub struct MQTTRenderTemplate<'a>(pub Arc<RwLock<Environment<'a>>>);
-
-#[derive(Debug, Serialize, Deserialize, Component, Default, Reflect)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct MQTTAvailabilityConfiguration {
-    pub availability: Option<Availability>,
+    pub payload_available: Option<String>,
+    pub payload_not_available: Option<String>,
+    pub availability: Option<Vec<AvailabilityConfig>>,
     pub availability_topic: Option<String>,
     pub availability_template: Option<String>,
     pub availability_mode: Option<String>,
 }
 
-impl MQTTAvailabilityConfiguration {
-    pub fn availability_topic(&self) -> &str {
-        match self.availability_topic {
-            Some(ref topic) => topic,
-            None => match self.availability {
-                Some(ref avail) => &avail.topic,
-                None => "",
-            },
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Reflect)]
-pub struct Availability {
+pub struct AvailabilityConfig {
     pub payload_available: Option<String>,
     pub payload_not_available: Option<String>,
     pub topic: String,
     pub value_template: Option<String>,
+}
+
+impl AvailabilityConfig {
+    pub fn payload_available(&self) -> &str {
+        self.payload_available.as_deref().unwrap_or("online")
+    }
+
+    pub fn payload_not_available(&self) -> &str {
+        self.payload_not_available.as_deref().unwrap_or("offline")
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Component, Default, Reflect)]
+pub struct MQTTAvailability {
+    pub topic: HashMap<String, AvailabilityConfig>,
+    pub avail_topics: HashMap<String, bool>,
+    pub available_latest: bool,
+}
+
+impl MQTTAvailability {
+    pub fn from_config(config: MQTTAvailabilityConfiguration) -> Self {
+        let mut topic = HashMap::new();
+        if let Some(availability_topic) = config.availability_topic {
+            let avail_config = AvailabilityConfig {
+                payload_available: config.payload_available,
+                payload_not_available: config.payload_not_available,
+                topic: availability_topic.clone(),
+                value_template: config.availability_template,
+            };
+            topic.insert(availability_topic, avail_config);
+        }
+
+        if let Some(availability) = config.availability {
+            for avail in availability {
+                let avail_config = AvailabilityConfig {
+                    payload_available: avail.payload_available,
+                    payload_not_available: avail.payload_not_available,
+                    topic: avail.topic.clone(),
+                    value_template: avail.value_template,
+                };
+                topic.insert(avail.topic, avail_config);
+            }
+        }
+
+        if !topic.is_empty() {
+            println!("avail topic {:#?} ", topic);
+        }
+
+        Self {
+            topic,
+            avail_topics: Default::default(),
+            available_latest: false,
+        }
+    }
+
+    pub fn update_from_config(&mut self, update_config: MQTTAvailabilityConfiguration) {
+        self.topic.clear();
+        if let Some(availability_topic) = update_config.availability_topic {
+            let avail_config = AvailabilityConfig {
+                payload_available: update_config.payload_available,
+                payload_not_available: update_config.payload_not_available,
+                topic: availability_topic.clone(),
+                value_template: update_config.availability_template,
+            };
+            self.topic.insert(availability_topic, avail_config);
+        }
+
+        if let Some(availability) = update_config.availability {
+            for avail in availability {
+                let avail_config = AvailabilityConfig {
+                    payload_available: avail.payload_available,
+                    payload_not_available: avail.payload_not_available,
+                    topic: avail.topic.clone(),
+                    value_template: avail.value_template,
+                };
+                self.topic.insert(avail.topic, avail_config);
+            }
+        }
+    }
 }

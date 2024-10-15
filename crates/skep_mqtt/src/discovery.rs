@@ -11,7 +11,7 @@ use bevy_mqtt::{
 };
 
 use crate::{
-    entity::{Availability, MQTTAvailabilityConfiguration, MQTTRenderTemplate},
+    entity::{AvailabilityConfig, MQTTAvailability, MQTTAvailabilityConfiguration},
     subscription::MQTTStateSubscription,
 };
 use bevy_core::Name;
@@ -243,10 +243,13 @@ fn spawn_mqtt_entity(
         topic: topic.to_string(),
         payload: discovery_payload,
     };
-    let availability = serde_json::from_value::<MQTTAvailabilityConfiguration>(Value::from(
+
+    println!("discovery_payload: {:?}", discovery_payload);
+    let availability_config = serde_json::from_value::<MQTTAvailabilityConfiguration>(Value::from(
         discovery_payload.payload.clone(),
     ))
     .unwrap_or_default();
+    let availability = MQTTAvailability::from_config(availability_config);
 
     let cmds = commands
         .insert((discovery_hash, state_subscription, availability))
@@ -452,6 +455,5 @@ fn test_replace_base_topic() {
 fn test_availability() {
     let mut json = json!({"availability_topic":"watermeter/connection","device":{"configuration_url":"http://192.168.1.51","identifiers":["watermeter"],"manufacturer":"AI on the Edge Device","model":"Meter Digitizer","name":"watermeter","sw_version":"v15.7.0"},"device_class":"problem","icon":"mdi:alert-outline","name":"Problem","object_id":"watermeter_problem","payload_available":"connected","payload_not_available":"connection lost","state_topic":"watermeter/main/error","unique_id":"watermeter-problem","value_template":"{{ 'OFF' if 'no error' in value else 'ON'}}"});
 
-    let availability =
-        serde_json::from_value::<MQTTAvailabilityConfiguration>(json.clone()).unwrap();
+    let availability = serde_json::from_value::<MQTTAvailability>(json.clone()).unwrap();
 }

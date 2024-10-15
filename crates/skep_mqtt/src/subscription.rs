@@ -1,6 +1,6 @@
 use crate::{
     discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload},
-    entity::{MQTTAvailabilityConfiguration, MQTTRenderTemplate},
+    entity::{MQTTAvailability, MQTTAvailabilityConfiguration},
 };
 use bevy_core::Name;
 use bevy_ecs::{
@@ -9,7 +9,7 @@ use bevy_ecs::{
     observer::Trigger,
     prelude::{Added, Changed, Commands, Event, Query},
 };
-use bevy_hierarchy::BuildChildren;
+use bevy_hierarchy::{BuildChildren, Children, DespawnRecursiveExt, HierarchyQueryExt};
 use bevy_log::debug;
 use bevy_mqtt::{rumqttc::QoS, SubscribeTopic, TopicMessage};
 use bevy_reflect::{Map, Reflect};
@@ -18,7 +18,7 @@ use bytes::Bytes;
 use minijinja::{context, Environment};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::process::Command;
+use std::process::{Child, Command};
 use tera::{Context, Tera};
 
 #[derive(Debug)]
@@ -134,30 +134,71 @@ pub(crate) fn add_state_subscription(
     }
 }
 
-pub(crate) fn add_available_subscription(
+pub(crate) fn update_available_subscription(
     mut commands: Commands,
+    q_child: Query<&mut SubscribeTopic>,
     mut q_available: Query<
         (
             Entity,
             &MQTTDiscoveryPayload,
-            &mut MQTTAvailabilityConfiguration,
+            &mut MQTTAvailability,
+            Option<&Children>,
         ),
         Changed<MQTTDiscoveryPayload>,
     >,
 ) {
-    for (entity, payload, mut avail_sub) in q_available.iter_mut() {
-        if let Ok(available) = serde_json::from_value::<MQTTAvailabilityConfiguration>(Value::from(
-            payload.payload.clone(),
-        )) {
-            if !available.availability_topic().is_empty() {
-                let sub_topic = SubscribeTopic::new(available.availability_topic(), 0);
+    for (entity, payload, mut avail, opt_children) in q_available.iter_mut() {
+        if let Ok(available_config) = serde_json::from_value::<MQTTAvailabilityConfiguration>(
+            Value::from(payload.payload.clone()),
+        ) {
+            avail.update_from_config(available_config);
+        }
+    }
+}
+
+pub(crate) fn update_subscription(
+    mut commands: Commands,
+    q_child: Query<&mut SubscribeTopic>,
+    mut q_available: Query<
+        (Entity, &MQTTAvailability, Option<&Children>),
+        Changed<MQTTAvailability>,
+    >,
+) {
+    for (entity, avail, opt_children) in q_available.iter() {
+        if let Some(children) = opt_children {
+            for avail_config in avail.topic.values() {
+                for child in children {
+                    let child_id = *child;
+                    let child_topic = q_child.get(child_id).unwrap().topic();
+                    if child_topic == avail_config.topic {
+                        continue;
+                    }
+                    let sub_topic = SubscribeTopic::new(child_topic, 0);
+                    let child_id = commands.spawn(sub_topic).id();
+                    commands
+                        .entity(entity)
+                        .add_child(child_id)
+                        .observe(handle_available_value);
+                }
+            }
+            // find need remove topic;
+            for child in children {
+                let child_id = *child;
+                if let Ok(child_topic) = q_child.get(child_id) {
+                    if !avail.topic.contains_key(child_topic.topic()) {
+                        commands.entity(child_id).despawn_recursive();
+                    }
+                }
+            }
+        } else {
+            for avail_config in avail.topic.values() {
+                let sub_topic = SubscribeTopic::new(&avail_config.topic, 0);
                 let child_id = commands.spawn(sub_topic).id();
                 commands
                     .entity(entity)
                     .add_child(child_id)
                     .observe(handle_available_value);
             }
-            *avail_sub = available;
         }
     }
 }
@@ -167,57 +208,88 @@ fn handle_state_value(
     q_state_sub: Query<(&MQTTStateSubscription, &Name)>,
 ) {
     if let Ok((state_sub, name)) = q_state_sub.get(topic_message.entity()) {
-        let update_state = if let Some(value_template) = state_sub.value_template.as_ref() {
-            let state_str = std::str::from_utf8(&topic_message.event().payload).unwrap();
-
-            try_render_state(value_template, &state_str).unwrap_or_default()
-        } else {
-            let raw_value = std::str::from_utf8(&topic_message.event().payload)
-                .unwrap()
-                .to_string();
-            // println!("raw_value: {:?}", raw_value);
-            raw_value
-        };
-        if !update_state.is_empty() {
-            debug!("{}: {}", name, update_state);
+        if topic_message.event().topic == state_sub.state_topic {
+            let update_state =
+                try_render_template(&state_sub.value_template, &topic_message.event().payload)
+                    .unwrap_or_default();
+            if !update_state.is_empty() {
+                debug!("{}: {}", name, update_state);
+            }
         }
     }
 }
 
-fn try_render_state(value_template: &String, state_str: &&str) -> anyhow::Result<String> {
-    let mut env = Environment::new();
-    env.add_template("state", value_template)?;
+fn try_render_template(
+    value_template: &Option<String>,
+    value_bytes: &[u8],
+) -> anyhow::Result<String> {
+    if let Some(value_template) = value_template {
+        let mut env = Environment::new();
+        env.add_template("value", &value_template)?;
+        let template = env.get_template("value")?;
 
-    let template = env.get_template("state")?;
-
-    let template_value =
-        if let Ok(state_json) = serde_json::from_str::<serde_json::Value>(&state_str) {
-            let json_data = template.render(context! { value_json => state_json })?;
-            json_data
+        let template_value = if let Ok(state_json) = serde_json::from_slice::<Value>(value_bytes) {
+            template.render(context! { value_json => state_json })?
         } else {
-            let str = template.render(context! { value => state_str })?;
-
-            str
+            template.render(context! { value => value_bytes })?
         };
 
-    // println!("template {} state: {}", value_template, template_value);
-    Ok(template_value)
+        Ok(template_value)
+    } else {
+        Ok(std::str::from_utf8(value_bytes)?.to_string())
+    }
 }
 
 fn handle_available_value(
     topic_message: Trigger<TopicMessage>,
-    q_avail: Query<(&MQTTAvailabilityConfiguration, &Name)>,
+    q_avail: Query<(&MQTTAvailability, &Name)>,
 ) {
     if let Ok((available, name)) = q_avail.get(topic_message.entity()) {
-        if !available.availability_topic().is_empty() {
-            debug!(
-                "available_update '{}' {:?}: {:?}",
-                name,
-                available.availability_topic(),
-                topic_message.event().payload
-            );
-        }
+        let update_status = try_render_available(&available, &topic_message.event()).ok();
+
+        debug!("{} status: {:?}", name, update_status);
     }
+}
+
+fn try_render_available(
+    avail_config: &MQTTAvailability,
+    message: &TopicMessage,
+) -> anyhow::Result<bool> {
+    if let Some(config) = avail_config.topic.get(&message.topic) {
+        let payload_available_str = config.payload_available();
+        let payload_not_available_str = config.payload_not_available();
+        let status_str = String::from_utf8(message.payload.to_vec())?;
+
+        let match_value = match &config.value_template {
+            Some(available_template) => {
+                let mut env = Environment::new();
+                env.add_template("available", &available_template)?;
+                let template = env.get_template("available")?;
+                let template_value =
+                    if let Ok(state_json) = serde_json::from_str::<Value>(&status_str) {
+                        template.render(context! { value_json => state_json })?
+                    } else {
+                        template.render(context! { value => status_str })?
+                    };
+
+                template_value
+            }
+            None => status_str,
+        };
+
+        let available = if payload_available_str == match_value {
+            true
+        } else if payload_not_available_str == match_value {
+            false
+        } else {
+            return Err(anyhow::anyhow!(
+                "Invalid availability template: {}",
+                match_value
+            ));
+        };
+    }
+
+    Ok(false)
 }
 
 #[test]
