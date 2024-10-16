@@ -361,7 +361,7 @@ fn create_or_update_discovery_payload(
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MqttSensorConfiguration {
     pub availability_topic: Option<String>,
-    pub device: Option<DeviceInfo>,
+    // pub device: Option<DeviceInfo>,
     pub device_class: Option<SensorDeviceClass>,
     /// Flag which defines if the entity should be enabled when first added.
     pub enabled_by_default: Option<bool>,

@@ -9,7 +9,7 @@ use std::str::FromStr;
 mod constant;
 pub use constant::*;
 use skep_core::{
-    device::DeviceEntry,
+    device::Device,
     typing::{SetupConfigEntry, ValueType},
 };
 
@@ -50,7 +50,7 @@ impl Sensor {
 
 fn create_or_update(
     trigger: Trigger<SetupConfigEntry>,
-    device_query: Query<&DeviceEntry>,
+    device_query: Query<&Device>,
     mut commands: Commands,
 ) {
     if let Ok(sensor) = Sensor::from_config(trigger.event().clone()) {

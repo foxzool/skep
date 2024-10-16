@@ -11,6 +11,7 @@ use bevy_mqtt::{
 };
 
 use crate::{
+    constants::DOMAIN,
     entity::{AvailabilityConfig, MQTTAvailability, MQTTAvailabilityConfiguration},
     subscription::MQTTStateSubscription,
 };
@@ -23,14 +24,17 @@ use bevy_ecs::{
 };
 use bevy_hierarchy::{BuildChildren, Parent};
 use bevy_reflect::Reflect;
-use bevy_utils::HashMap;
+use bevy_utils::{hashbrown::HashSet, HashMap};
 use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use skep_core::{
     constants::EntityCategory,
-    device::DeviceEntry,
-    helper::{device_registry::DeviceInfo, entity::SkepEntityComponent},
+    device::{Device, DeviceResource},
+    helper::{
+        device_registry::{DeviceInfo, DeviceSpec},
+        entity::SkepEntityComponent,
+    },
     typing::SetupConfigEntry,
 };
 use std::{
@@ -154,6 +158,7 @@ pub(crate) fn on_mqtt_message_received(
     mut publish_ev: EventReader<MqttPublishPacket>,
     mut query: Query<&mut SkepMqttPlatform>,
     mut commands: Commands,
+    mut device_resource: ResMut<DeviceResource>,
 ) {
     for packet in publish_ev.read() {
         if let Ok(mut mqtt_platform) = query.get_mut(packet.entity) {
@@ -170,7 +175,7 @@ pub(crate) fn on_mqtt_message_received(
 
             if let Ok((component, node_id, object_id)) = parse_topic_config(&topic_trimmed) {
                 if let Ok(discovery_payload) = handle_discovery_message(&payload) {
-                    if let Ok(components) = serde_json::from_value::<MQTTDiscoveryComponents>(
+                    if let Ok(pending_components) = serde_json::from_value::<MQTTDiscoveryComponents>(
                         Value::from(discovery_payload.clone()),
                     ) {
                         let discovery_id = if let Some(node_id) = node_id {
@@ -187,6 +192,29 @@ pub(crate) fn on_mqtt_message_received(
                             topic: topic_trimmed.to_string(),
                             payload: discovery_payload,
                         };
+                        let mut device_entity_id = None;
+                        if let Some(device_spec) = pending_components.device.clone() {
+                            let device_info = DeviceInfo::from_config(DOMAIN, device_spec);
+                            let device_entity = device_resource
+                                .get_device(&device_info.identifiers, &device_info.connections);
+
+                            if let Some(device_entity) = device_entity {
+                                let mut cmds = commands.entity(device_entity);
+                                cmds.insert(device_info.clone());
+                                device_entity_id = Some(device_entity);
+                            } else {
+                                let device_entity = commands.spawn_empty().id();
+                                commands.entity(packet.entity).add_child(device_entity);
+                                commands.entity(device_entity).insert(device_info.clone());
+                                device_resource
+                                    .identifiers
+                                    .insert(device_info.identifiers.clone(), device_entity);
+                                device_resource
+                                    .connections
+                                    .insert(device_info.connections.clone(), device_entity);
+                                device_entity_id = Some(device_entity);
+                            }
+                        }
 
                         let mut is_new = false;
                         let entity =
@@ -197,9 +225,18 @@ pub(crate) fn on_mqtt_message_received(
                                 );
                                 *entity
                             } else {
+                                debug!(
+                                    "Component has not been discovered yet: {}, queuing spawn",
+                                    discovery_hash
+                                );
                                 is_new = true;
                                 let id = commands.spawn_empty().id();
-                                commands.entity(packet.entity).add_child(id);
+                                if let Some(device_entity) = device_entity_id {
+                                    commands.entity(device_entity).add_child(id);
+                                } else {
+                                    commands.entity(packet.entity).add_child(id);
+                                }
+
                                 mqtt_platform.discovered.insert(discovery_hash.clone(), id);
                                 id
                             };
@@ -211,7 +248,7 @@ pub(crate) fn on_mqtt_message_received(
                             cmds.insert(discovery_payload);
                         }
 
-                        spawn_or_update_components(&mut cmds, components);
+                        spawn_or_update_components(&mut cmds, pending_components);
                     }
                 }
             }
@@ -265,10 +302,6 @@ fn spawn_or_update_components(cmds: &mut EntityCommands, components: MQTTDiscove
     if let Some(entity_category) = components.entity_category {
         cmds.insert(entity_category);
     }
-
-    if let Some(device_info) = components.device {
-        cmds.insert(device_info);
-    }
 }
 
 #[derive(Deserialize)]
@@ -279,7 +312,7 @@ struct MQTTDiscoveryComponents {
     availability_config: Option<MQTTAvailabilityConfiguration>,
     #[serde(flatten)]
     entity_category: Option<EntityCategory>,
-    device: Option<DeviceInfo>,
+    device: Option<DeviceSpec>,
 }
 
 // Replace all abbreviations in the payload
@@ -409,14 +442,6 @@ fn replace_topic_base(discovery_payload: &mut Map<String, Value>) {
                 }
             }
         }
-    }
-}
-
-fn device_info_from_payload(payload: Map<String, Value>) -> anyhow::Result<Option<DeviceInfo>> {
-    match payload.get("device").cloned() {
-        None => Ok(None),
-        Some(device_value) => serde_json::from_value(device_value)
-            .with_context(|| "Failed to deserialize device info"),
     }
 }
 

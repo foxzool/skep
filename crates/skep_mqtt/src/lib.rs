@@ -10,6 +10,7 @@ use crate::{
     subscription::{add_state_subscription, update_available_subscription, MQTTStateSubscription},
 };
 use bevy_app::prelude::*;
+use bevy_core::Name;
 use bevy_ecs::prelude::*;
 use bevy_mqtt::{rumqttc, MqttClientError, MqttConnectError, MqttPlugin, MqttSetting};
 use bevy_reflect::Reflect;
@@ -181,7 +182,11 @@ pub fn reload_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
                 mqtt_options.set_transport(transport);
 
                 commands.spawn((
-                    Integration::new("MQTT"),
+                    Name::new("MQTT".to_string()),
+                    Integration {
+                        name: "MQTT".to_string(),
+                        domain: "mqtt".to_string(),
+                    },
                     Platform::new(format!("{}:{}", config_entry.broker, config_entry.port)),
                     MqttSetting {
                         mqtt_options,

@@ -1,25 +1,29 @@
 use crate::{helper::device_registry::DeviceInfo, integration::Integration, platform::Platform};
 use bevy_app::{App, Plugin, Update};
 use bevy_core::Name;
+use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::prelude::*;
-use bevy_reflect::Reflect;
-use bevy_utils::{tracing::debug, HashSet};
+use bevy_hierarchy::{HierarchyQueryExt, Parent};
+use bevy_reflect::{Reflect, TypePath};
+use bevy_utils::{tracing::debug, HashMap, HashSet};
 use chrono::Utc;
 use serde::{Deserialize, Deserializer, Serialize};
+use std::hash::Hash;
 use uuid::Uuid;
 
 pub(crate) struct SkepDevicePlugin;
 
 impl Plugin for SkepDevicePlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<DeviceEntry>()
+        app.register_type::<Device>()
             .register_type::<DeviceInfo>()
+            .init_resource::<DeviceResource>()
             .add_systems(Update, device_create_or_update);
     }
 }
 
 #[derive(Debug, Component, Reflect)]
-pub struct DeviceEntry {
+pub struct Device {
     pub area_id: Option<String>,
     pub configuration_url: Option<String>,
     #[reflect(ignore)]
@@ -29,7 +33,7 @@ pub struct DeviceEntry {
     pub entry_type: Option<DeviceEntryType>,
     pub hw_version: Option<String>,
     pub id: String,
-    pub identifiers: HashSet<(String, String)>,
+    pub identifiers: HashSet<TupleString>,
     pub labels: HashSet<String>,
     pub manufacturer: Option<String>,
     pub model: Option<String>,
@@ -44,7 +48,7 @@ pub struct DeviceEntry {
     pub via_device_id: Option<String>,
 }
 
-impl Default for DeviceEntry {
+impl Default for Device {
     fn default() -> Self {
         Self {
             area_id: None,
@@ -71,13 +75,13 @@ impl Default for DeviceEntry {
     }
 }
 
-impl DeviceEntry {
+impl Device {
     pub fn update_from_device_info(&mut self, device_info: DeviceInfo) {
         self.configuration_url = device_info.configuration_url;
-        self.connections = device_info.connections.unwrap_or_default();
+        // self.connections = device_info.connections;
         self.entry_type = device_info.entry_type;
         self.hw_version = device_info.hw_version;
-        self.identifiers = device_info.identifiers.unwrap_or_default();
+        // self.identifiers = device_info.identifiers;
         self.labels = device_info.labels.unwrap_or_default();
         self.manufacturer = device_info.manufacturer;
         self.model = device_info.model;
@@ -88,30 +92,6 @@ impl DeviceEntry {
         self.suggested_area = device_info.suggested_area;
         self.sw_version = device_info.sw_version;
         self.via_device_id = device_info.via_device_id;
-    }
-    pub fn device_info(&self) -> DeviceInfo {
-        DeviceInfo {
-            configuration_url: self.configuration_url.clone(),
-            connections: Some(self.connections.clone()),
-            default_manufacturer: self.manufacturer.clone(),
-            default_model: self.model.clone(),
-            default_name: self.name.clone(),
-            entry_type: self.entry_type.clone(),
-            identifiers: Some(self.identifiers.clone()),
-            manufacturer: self.manufacturer.clone(),
-            model: self.model.clone(),
-            model_id: self.model_id.clone(),
-            modified_at: Some(self.modified_at),
-            name: self.name.clone(),
-            serial_number: self.serial_number.clone(),
-            suggested_area: self.suggested_area.clone(),
-            sw_version: self.sw_version.clone(),
-            hw_version: self.hw_version.clone(),
-            labels: Some(self.labels.clone()),
-            translation_key: None,
-            translation_placeholders: None,
-            via_device_id: self.via_device_id.clone(),
-        }
     }
 
     pub fn name(&self) -> &str {
@@ -136,84 +116,109 @@ pub enum DeviceEntryType {
     Service,
 }
 
-fn deserialize_identifiers<'de, D>(deserializer: D) -> Result<Option<HashSet<String>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum StringOrSet {
-        String(String),
-        HashSet(HashSet<String>),
-        Null,
-    }
+#[derive(Debug, Deref, DerefMut, TypePath, Clone)]
+pub struct TupleString(pub (String, String));
 
-    match StringOrSet::deserialize(deserializer)? {
-        StringOrSet::String(s) => {
-            let mut set = HashSet::new();
-            set.insert(s);
-            Ok(Some(set))
-        }
-        StringOrSet::HashSet(set) => {
-            if set.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(set))
-            }
-        }
-        StringOrSet::Null => Ok(None),
+impl PartialEq<Self> for TupleString {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0 && self.1 == other.1
     }
 }
 
-impl DeviceInfo {
-    /// when connections or identifiers any one has set and has value, return true
-    pub fn is_valid(&self) -> bool {
-        match (&self.connections, &self.identifiers) {
-            (Some(connections), _) if !connections.is_empty() => true,
-            (_, Some(identifiers)) if !identifiers.is_empty() => true,
-            _ => false,
+impl Hash for TupleString {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+    }
+}
+
+impl Eq for TupleString {}
+
+#[derive(Debug, Default, Clone, Reflect)]
+pub struct HashsetTupleString(pub HashSet<TupleString>);
+
+impl Hash for HashsetTupleString {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for tuple in &self.0 {
+            tuple.hash(state);
         }
     }
 }
 
-impl From<DeviceInfo> for DeviceEntry {
-    fn from(device_info: DeviceInfo) -> Self {
-        Self {
-            area_id: None,
-            configuration_url: device_info.configuration_url,
-            created_at: chrono::DateTime::from(Utc::now()),
-            connections: device_info.connections.unwrap_or_default(),
-            disabled_by: None,
-            entry_type: device_info.entry_type,
-            hw_version: device_info.hw_version,
-            id: Uuid::new_v4().to_string(),
-            identifiers: device_info.identifiers.unwrap_or_default(),
-            labels: device_info.labels.unwrap_or_default(),
-            manufacturer: device_info.manufacturer,
-            model: device_info.model,
-            model_id: device_info.model_id,
-            modified_at: device_info.modified_at.unwrap_or_default(),
-            name_by_user: None,
-            name: device_info.name,
-            serial_number: device_info.serial_number,
-            suggested_area: device_info.suggested_area,
-            sw_version: device_info.sw_version,
-            via_device_id: device_info.via_device_id,
+impl PartialEq<Self> for HashsetTupleString {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for HashsetTupleString {}
+
+#[derive(Debug, Resource, Default)]
+pub struct DeviceResource {
+    pub identifiers: HashMap<HashsetTupleString, Entity>,
+    pub connections: HashMap<HashsetTupleString, Entity>,
+}
+
+impl DeviceResource {
+    pub fn get_device(
+        &self,
+        identifiers: &HashsetTupleString,
+        connections: &HashsetTupleString,
+    ) -> Option<Entity> {
+        if let Some(entity) = self.get_device_by_identifiers(identifiers) {
+            return Some(entity);
         }
+        self.get_device_by_connections(connections)
+    }
+
+    fn get_device_by_identifiers(&self, identifiers: &HashsetTupleString) -> Option<Entity> {
+        if let Some(entity) = self.identifiers.get(identifiers) {
+            return Some(*entity);
+        }
+        None
+    }
+
+    fn get_device_by_connections(&self, connections: &HashsetTupleString) -> Option<Entity> {
+        if let Some(entity) = self.connections.get(connections) {
+            return Some(*entity);
+        }
+        None
     }
 }
 
 pub(crate) fn device_create_or_update(
     mut commands: Commands,
-    mut q_device: Query<(Entity, &DeviceInfo, Option<&mut DeviceEntry>), Added<DeviceInfo>>,
+    parent_query: Query<&Parent>,
+    q_integration: Query<&Integration>,
+    mut q_devices: Query<&mut Device>,
+    mut q_device: Query<(Entity, &DeviceInfo), Added<DeviceInfo>>,
 ) {
-    for (entity, device_info, device_entry) in q_device.iter_mut() {
-        if let Some(mut device_entry) = device_entry {
-            device_entry.update_from_device_info(device_info.clone());
-        } else {
-            let device_entry = DeviceEntry::from(device_info.clone());
-            debug!("create device entry: {:?}", device_entry);
-            commands.entity(entity).insert(device_entry);
+    for (entity, device_info) in q_device.iter_mut() {
+        let mut domain = "";
+
+        'fa: for ancestor in parent_query.iter_ancestors(entity) {
+            if let Ok(integration) = q_integration.get(ancestor) {
+                domain = integration.domain.as_ref();
+                break 'fa;
+            }
         }
+        if domain.is_empty() {
+            continue;
+        }
+        // let mut new_device = true;
+        // 'fd: for mut device in q_devices.iter_mut() {
+        //     if device.identifiers == device_info.identifiers {
+        //         debug!("Device already exists, updating");
+        //         device.update_from_device_info(device_info.clone());
+        //         new_device = false;
+        //         break 'fd;
+        //     }
+        // }
+        //
+        // if new_device {
+        //     let mut device_entry = Device::default();
+        //     device_entry.update_from_device_info(device_info.clone());
+        //     commands.entity(entity).insert(device_entry);
+        // }
     }
 }
