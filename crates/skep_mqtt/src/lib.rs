@@ -2,7 +2,8 @@ use crate::{
     binary_sensor::MqttBinarySensorPlugin,
     constants::DOMAIN,
     discovery::{
-        on_mqtt_message_received, sub_default_topic, MQTTDiscoveryHash, MQTTDiscoveryPayload,
+        on_mqtt_message_received, setup_new_entity_from_discovery, sub_default_topic,
+        MQTTDiscoveryHash, MQTTDiscoveryNew, MQTTDiscoveryPayload, MQTTDiscoveryUpdate,
         MQTTSupportComponent, ProcessDiscoveryPayload,
     },
     entity::{MQTTAvailability, MQTTAvailabilityConfiguration},
@@ -51,6 +52,8 @@ impl Plugin for SkepMqttPlugin {
             .register_type::<MQTTStateSubscription>()
             .register_type::<HashSet<(String, String)>>()
             .add_event::<ProcessDiscoveryPayload>()
+            .add_event::<MQTTDiscoveryNew>()
+            .add_event::<MQTTDiscoveryUpdate>()
             .add_systems(Startup, setup)
             .add_systems(
                 Update,
@@ -116,13 +119,7 @@ impl Default for SkepMqttPlatform {
 
 #[derive(Debug)]
 pub struct PendingDiscovered {
-    pub pending: VecDeque<HashMap<String, Value>>,
-}
-
-impl PendingDiscovered {
-    pub fn new(pending: VecDeque<HashMap<String, Value>>) -> Self {
-        Self { pending }
-    }
+    pub pending: VecDeque<MQTTDiscoveryPayload>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -181,19 +178,21 @@ pub fn reload_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
 
                 mqtt_options.set_transport(transport);
 
-                commands.spawn((
-                    Name::new("MQTT".to_string()),
-                    Integration {
-                        name: "MQTT".to_string(),
-                        domain: "mqtt".to_string(),
-                    },
-                    Platform::new(format!("{}:{}", config_entry.broker, config_entry.port)),
-                    MqttSetting {
-                        mqtt_options,
-                        cap: 20,
-                    },
-                    SkepMqttPlatform::default(),
-                ));
+                commands
+                    .spawn((
+                        Name::new("MQTT".to_string()),
+                        Integration {
+                            name: "MQTT".to_string(),
+                            domain: "mqtt".to_string(),
+                        },
+                        Platform::new(format!("{}:{}", config_entry.broker, config_entry.port)),
+                        MqttSetting {
+                            mqtt_options,
+                            cap: 20,
+                        },
+                        SkepMqttPlatform::default(),
+                    ))
+                    .observe(setup_new_entity_from_discovery);
             }
         }
     }

@@ -5,7 +5,6 @@ use crate::{
         CONF_PAYLOAD_NOT_AVAILABLE, CONF_TOPIC,
     },
     discovery::MQTTDiscoveryPayload,
-    sensor::MqttSensorComponent,
     subscription::EntitySubscription,
     DiscoveryInfoType,
 };

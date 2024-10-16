@@ -2,7 +2,11 @@ use crate::{helper::device_registry::DeviceInfo, integration::Integration, platf
 use bevy_app::{App, Plugin, Update};
 use bevy_core::Name;
 use bevy_derive::{Deref, DerefMut};
-use bevy_ecs::prelude::*;
+use bevy_ecs::{
+    component::{ComponentHooks, StorageType},
+    prelude::*,
+    world::DeferredWorld,
+};
 use bevy_hierarchy::{HierarchyQueryExt, Parent};
 use bevy_reflect::{Reflect, TypePath};
 use bevy_utils::{tracing::debug, HashMap, HashSet};
@@ -18,34 +22,49 @@ impl Plugin for SkepDevicePlugin {
         app.register_type::<Device>()
             .register_type::<DeviceInfo>()
             .init_resource::<DeviceResource>()
-            .add_systems(Update, device_create_or_update);
+            // .add_systems(Update, device_create_or_update)
+        ;
     }
 }
 
-#[derive(Debug, Component, Reflect)]
+#[derive(Debug, Reflect)]
 pub struct Device {
     pub area_id: Option<String>,
     pub configuration_url: Option<String>,
     #[reflect(ignore)]
     pub created_at: chrono::DateTime<Utc>,
-    pub connections: HashSet<(String, String)>,
+    #[reflect(ignore)]
+    pub modified_at: chrono::DateTime<Utc>,
+    pub connections: HashsetTupleString,
     pub disabled_by: Option<DeviceEntryDisabler>,
     pub entry_type: Option<DeviceEntryType>,
     pub hw_version: Option<String>,
     pub id: String,
-    pub identifiers: HashSet<TupleString>,
+    pub identifiers: HashsetTupleString,
     pub labels: HashSet<String>,
     pub manufacturer: Option<String>,
     pub model: Option<String>,
     pub model_id: Option<String>,
-    #[reflect(ignore)]
-    pub modified_at: chrono::DateTime<Utc>,
     pub name_by_user: Option<String>,
     pub name: Option<String>,
     pub serial_number: Option<String>,
     pub suggested_area: Option<String>,
     pub sw_version: Option<String>,
     pub via_device_id: Option<String>,
+}
+
+impl Component for Device {
+    const STORAGE_TYPE: StorageType = StorageType::Table;
+
+    fn register_component_hooks(hooks: &mut ComponentHooks) {
+        hooks.on_insert(|mut world: DeferredWorld, entity, _component_id| {
+            let device = world.get::<Device>(entity).unwrap();
+            let name = Name::new(device.name().to_string());
+            let mut commands = world.commands();
+            let mut binding = commands.entity(entity);
+            binding.insert(name);
+        });
+    }
 }
 
 impl Default for Device {
@@ -63,7 +82,7 @@ impl Default for Device {
             serial_number: None,
             suggested_area: None,
             sw_version: None,
-            identifiers: HashSet::new(),
+            identifiers: Default::default(),
             labels: Default::default(),
             manufacturer: None,
             model: None,
@@ -78,15 +97,14 @@ impl Default for Device {
 impl Device {
     pub fn update_from_device_info(&mut self, device_info: DeviceInfo) {
         self.configuration_url = device_info.configuration_url;
-        // self.connections = device_info.connections;
+        self.connections = device_info.connections;
         self.entry_type = device_info.entry_type;
         self.hw_version = device_info.hw_version;
-        // self.identifiers = device_info.identifiers;
+        self.identifiers = device_info.identifiers;
         self.labels = device_info.labels.unwrap_or_default();
         self.manufacturer = device_info.manufacturer;
         self.model = device_info.model;
         self.model_id = device_info.model_id;
-        self.modified_at = device_info.modified_at.unwrap_or_default();
         self.name = device_info.name;
         self.serial_number = device_info.serial_number;
         self.suggested_area = device_info.suggested_area;
@@ -110,7 +128,7 @@ pub enum DeviceEntryDisabler {
     User,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Reflect)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Reflect, Copy)]
 pub enum DeviceEntryType {
     #[default]
     Service,
@@ -186,39 +204,39 @@ impl DeviceResource {
     }
 }
 
-pub(crate) fn device_create_or_update(
-    mut commands: Commands,
-    parent_query: Query<&Parent>,
-    q_integration: Query<&Integration>,
-    mut q_devices: Query<&mut Device>,
-    mut q_device: Query<(Entity, &DeviceInfo), Added<DeviceInfo>>,
-) {
-    for (entity, device_info) in q_device.iter_mut() {
-        let mut domain = "";
-
-        'fa: for ancestor in parent_query.iter_ancestors(entity) {
-            if let Ok(integration) = q_integration.get(ancestor) {
-                domain = integration.domain.as_ref();
-                break 'fa;
-            }
-        }
-        if domain.is_empty() {
-            continue;
-        }
-        // let mut new_device = true;
-        // 'fd: for mut device in q_devices.iter_mut() {
-        //     if device.identifiers == device_info.identifiers {
-        //         debug!("Device already exists, updating");
-        //         device.update_from_device_info(device_info.clone());
-        //         new_device = false;
-        //         break 'fd;
-        //     }
-        // }
-        //
-        // if new_device {
-        //     let mut device_entry = Device::default();
-        //     device_entry.update_from_device_info(device_info.clone());
-        //     commands.entity(entity).insert(device_entry);
-        // }
-    }
-}
+// pub(crate) fn device_create_or_update(
+//     mut commands: Commands,
+//     parent_query: Query<&Parent>,
+//     q_integration: Query<&Integration>,
+//     mut q_devices: Query<&mut Device>,
+//     mut q_device: Query<(Entity, &DeviceInfo), Added<DeviceInfo>>,
+// ) {
+//     for (entity, device_info) in q_device.iter_mut() {
+//         let mut domain = "";
+//
+//         'fa: for ancestor in parent_query.iter_ancestors(entity) {
+//             if let Ok(integration) = q_integration.get(ancestor) {
+//                 domain = integration.domain.as_ref();
+//                 break 'fa;
+//             }
+//         }
+//         if domain.is_empty() {
+//             continue;
+//         }
+//         // let mut new_device = true;
+//         // 'fd: for mut device in q_devices.iter_mut() {
+//         //     if device.identifiers == device_info.identifiers {
+//         //         debug!("Device already exists, updating");
+//         //         device.update_from_device_info(device_info.clone());
+//         //         new_device = false;
+//         //         break 'fd;
+//         //     }
+//         // }
+//         //
+//         // if new_device {
+//         //     let mut device_entry = Device::default();
+//         //     device_entry.update_from_device_info(device_info.clone());
+//         //     commands.entity(entity).insert(device_entry);
+//         // }
+//     }
+// }

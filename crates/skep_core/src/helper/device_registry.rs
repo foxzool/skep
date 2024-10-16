@@ -4,14 +4,14 @@ use crate::{
 };
 use bevy_ecs::prelude::Component;
 use bevy_reflect::Reflect;
-use bevy_utils::{HashMap, HashSet};
+use bevy_utils::{tracing::debug, HashMap, HashSet};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_aux::prelude::StringOrVecToVec;
 use serde_json::Value;
 use std::str::FromStr;
 
-#[derive(Debug, Default, Clone, Component, Reflect)]
+#[derive(Debug, Default, Clone, Reflect)]
 pub struct DeviceInfo {
     pub configuration_url: Option<String>,
     pub connections: HashsetTupleString,
@@ -23,8 +23,6 @@ pub struct DeviceInfo {
     pub manufacturer: Option<String>,
     pub model: Option<String>,
     pub model_id: Option<String>,
-    #[reflect(ignore)]
-    pub modified_at: Option<chrono::DateTime<Utc>>,
     pub name: Option<String>,
     pub serial_number: Option<String>,
     pub suggested_area: Option<String>,
@@ -37,13 +35,32 @@ pub struct DeviceInfo {
 }
 
 impl DeviceInfo {
+    pub fn update_from(&mut self, new: DeviceInfo) {
+        self.configuration_url = new.configuration_url.or(self.configuration_url.clone());
+        self.connections = new.connections;
+        self.default_manufacturer = new.default_manufacturer;
+        self.default_model = new.default_model;
+        self.default_name = new.default_name;
+        self.entry_type = new.entry_type.or(self.entry_type);
+        self.identifiers = new.identifiers;
+        self.entry_type = new.entry_type;
+        self.hw_version = new.hw_version;
+        self.labels = new.labels.or(self.labels.clone());
+        self.manufacturer = new.manufacturer;
+        self.model = new.model;
+        self.model_id = new.model_id;
+        self.name = new.name;
+        self.serial_number = new.serial_number;
+        self.suggested_area = new.suggested_area;
+        self.sw_version = new.sw_version;
+        self.via_device_id = new.via_device_id;
+    }
     pub fn from_config(domain: &str, config: DeviceSpec) -> DeviceInfo {
         DeviceInfo {
             identifiers: Self::parse_identifiers(domain, config.identifiers),
             manufacturer: config.manufacturer,
             model: config.model,
             model_id: config.model_id,
-            modified_at: None,
             name: config.name,
             serial_number: config.serial_number,
             suggested_area: config.suggested_area,
@@ -90,7 +107,6 @@ pub struct DeviceSpec {
     pub default_model: Option<String>,
     pub default_name: Option<String>,
     pub entry_type: Option<DeviceEntryType>,
-    #[serde(skip)]
     #[serde(deserialize_with = "identifiers_parser")]
     pub identifiers: Vec<String>,
     pub manufacturer: Option<String>,

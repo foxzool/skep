@@ -22,7 +22,7 @@ use bevy_ecs::{
     system::EntityCommands,
     world::DeferredWorld,
 };
-use bevy_hierarchy::{BuildChildren, Parent};
+use bevy_hierarchy::{BuildChildren, Children, Parent};
 use bevy_reflect::Reflect;
 use bevy_utils::{hashbrown::HashSet, HashMap};
 use regex::{Error, Regex};
@@ -35,6 +35,7 @@ use skep_core::{
         device_registry::{DeviceInfo, DeviceSpec},
         entity::SkepEntityComponent,
     },
+    platform::Platform,
     typing::SetupConfigEntry,
 };
 use std::{
@@ -49,6 +50,7 @@ use strum_macros::{Display, EnumString};
 #[strum(ascii_case_insensitive)]
 pub enum MQTTSupportComponent {
     Sensor,
+    BinarySensor,
 }
 
 #[derive(Debug, Reflect, Hash, PartialEq, Eq, Clone)]
@@ -69,19 +71,12 @@ impl Component for MQTTDiscoveryHash {
     fn register_component_hooks(hooks: &mut ComponentHooks) {
         hooks.on_insert(|mut world: DeferredWorld, entity, _component_id| {
             let discovery_hash = world.get::<MQTTDiscoveryHash>(entity).unwrap();
-            let component_name = discovery_hash.component.clone();
             let name = Name::new(format!(
                 "{} {}",
                 discovery_hash.component, discovery_hash.discovery_id
             ));
             let mut commands = world.commands();
-            let mut binding = commands.entity(entity);
-            let mut e = binding.insert(name);
-            if let Ok(mqtt_component) = MQTTSupportComponent::from_str(&component_name) {
-                e.insert(mqtt_component);
-            } else {
-                warn!("Component not supported: {}", component_name);
-            }
+            commands.entity(entity).insert(name);
         });
     }
 }
@@ -89,7 +84,9 @@ impl Component for MQTTDiscoveryHash {
 #[derive(Debug, Component, Clone)]
 pub struct MQTTDiscoveryPayload {
     pub topic: String,
-    pub payload: Map<String, Value>,
+    pub hash: MQTTDiscoveryHash,
+    pub payload: Value,
+    pub platform: String,
 }
 
 /// Subscribe to default topic
@@ -154,14 +151,23 @@ pub struct ProcessDiscoveryPayload {
     pub payload: HashMap<String, Value>,
 }
 
+#[derive(Debug, Event, Deref, DerefMut)]
+pub struct MQTTDiscoveryNew(pub MQTTDiscoveryPayload);
+
+#[derive(Debug, Event, Deref, DerefMut)]
+pub struct MQTTDiscoveryUpdate(pub MQTTDiscoveryPayload);
+
 pub(crate) fn on_mqtt_message_received(
     mut publish_ev: EventReader<MqttPublishPacket>,
-    mut query: Query<&mut SkepMqttPlatform>,
+    mut query: Query<(&mut SkepMqttPlatform, &Children)>,
     mut commands: Commands,
-    mut device_resource: ResMut<DeviceResource>,
+    q_components: Query<&MQTTSupportComponent>,
+    mut new_discovery: EventWriter<MQTTDiscoveryNew>,
+    mut update_discovery: EventWriter<MQTTDiscoveryUpdate>,
 ) {
     for packet in publish_ev.read() {
-        if let Ok(mut mqtt_platform) = query.get_mut(packet.entity) {
+        let platform_entity = packet.entity;
+        if let Ok((mut mqtt_platform, children)) = query.get_mut(platform_entity) {
             mqtt_platform.last_discovery = chrono::Utc::now();
 
             let payload = packet.payload.clone();
@@ -172,88 +178,115 @@ pub(crate) fn on_mqtt_message_received(
                 "",
                 1,
             );
+            if let (Ok((component, node_id, object_id)), Ok(discovery_payload)) = (
+                parse_topic_config(&topic_trimmed),
+                handle_discovery_message(&payload),
+            ) {
+                let discovery_id = if let Some(node_id) = node_id {
+                    format!("{} {}", node_id, object_id)
+                } else {
+                    object_id.clone()
+                };
+                let discovery_hash = MQTTDiscoveryHash {
+                    component: component.clone(),
+                    discovery_id: discovery_id.clone(),
+                };
 
-            if let Ok((component, node_id, object_id)) = parse_topic_config(&topic_trimmed) {
-                if let Ok(discovery_payload) = handle_discovery_message(&payload) {
-                    if let Ok(pending_components) = serde_json::from_value::<MQTTDiscoveryComponents>(
-                        Value::from(discovery_payload.clone()),
-                    ) {
-                        let discovery_id = if let Some(node_id) = node_id {
-                            format!("{} {}", node_id, object_id)
-                        } else {
-                            object_id.clone()
-                        };
-                        let discovery_hash = MQTTDiscoveryHash {
-                            component: component.clone(),
-                            discovery_id: discovery_id.clone(),
-                        };
+                let discovery_payload = MQTTDiscoveryPayload {
+                    topic: topic_trimmed.to_string(),
+                    hash: discovery_hash.clone(),
+                    payload: Value::from(discovery_payload),
+                    platform: "mqtt".to_string(),
+                };
 
-                        let discovery_payload = MQTTDiscoveryPayload {
-                            topic: topic_trimmed.to_string(),
-                            payload: discovery_payload,
-                        };
-                        let mut device_entity_id = None;
-                        if let Some(device_spec) = pending_components.device.clone() {
-                            let device_info = DeviceInfo::from_config(DOMAIN, device_spec);
-                            let device_entity = device_resource
-                                .get_device(&device_info.identifiers, &device_info.connections);
+                if let Some(pending_discovered) = mqtt_platform
+                    .discovery_pending_discovered
+                    .get_mut(&discovery_hash)
+                {
+                    pending_discovered.pending.push_front(discovery_payload);
+                    debug!(
+                        "Component has already been discovered: {}, queueing update",
+                        discovery_hash
+                    );
+                    continue;
+                }
 
-                            if let Some(device_entity) = device_entity {
-                                let mut cmds = commands.entity(device_entity);
-                                cmds.insert(device_info.clone());
-                                device_entity_id = Some(device_entity);
-                            } else {
-                                let device_entity = commands.spawn_empty().id();
-                                commands.entity(packet.entity).add_child(device_entity);
-                                commands.entity(device_entity).insert(device_info.clone());
-                                device_resource
-                                    .identifiers
-                                    .insert(device_info.identifiers.clone(), device_entity);
-                                device_resource
-                                    .connections
-                                    .insert(device_info.connections.clone(), device_entity);
-                                device_entity_id = Some(device_entity);
-                            }
-                        }
+                let already_discovered = mqtt_platform
+                    .discovery_already_discovered
+                    .contains(&discovery_hash);
+                if already_discovered
+                    && !mqtt_platform
+                        .discovery_pending_discovered
+                        .contains_key(&discovery_hash)
+                {
+                    mqtt_platform
+                        .discovery_already_discovered
+                        .insert(discovery_hash.clone());
+                }
 
-                        let mut is_new = false;
-                        let entity =
-                            if let Some(entity) = mqtt_platform.discovered.get(&discovery_hash) {
-                                debug!(
-                                    "Component has already been discovered: {}, queuing update",
-                                    discovery_hash
-                                );
-                                *entity
-                            } else {
-                                debug!(
-                                    "Component has not been discovered yet: {}, queuing spawn",
-                                    discovery_hash
-                                );
-                                is_new = true;
-                                let id = commands.spawn_empty().id();
-                                if let Some(device_entity) = device_entity_id {
-                                    commands.entity(device_entity).add_child(id);
-                                } else {
-                                    commands.entity(packet.entity).add_child(id);
-                                }
-
-                                mqtt_platform.discovered.insert(discovery_hash.clone(), id);
-                                id
-                            };
-
-                        let mut cmds = commands.entity(entity);
-                        if is_new {
-                            cmds.insert(discovery_hash).insert(discovery_payload);
-                        } else {
-                            cmds.insert(discovery_payload);
-                        }
-
-                        spawn_or_update_components(&mut cmds, pending_components);
-                    }
+                if already_discovered {
+                    debug!(
+                        "Component has already been discovered: {}, sending update",
+                        discovery_hash
+                    );
+                    commands
+                        .trigger_targets(MQTTDiscoveryUpdate(discovery_payload), children.to_vec());
+                } else {
+                    mqtt_platform
+                        .discovery_already_discovered
+                        .insert(discovery_hash.clone());
+                    commands
+                        .trigger_targets(MQTTDiscoveryNew(discovery_payload), children.to_vec());
                 }
             }
         } else {
             warn!("MqttPlatform not found");
+        }
+    }
+}
+
+pub(crate) fn setup_new_entity_from_discovery(
+    trigger: Trigger<MQTTDiscoveryNew>,
+    mut commands: Commands,
+    q_mqtt_component: Query<&MQTTSupportComponent>,
+    mut q_devices: Query<&mut Device>,
+) {
+    if let Ok(mut component) = q_mqtt_component.get(trigger.entity()) {
+        let discovery_payload = trigger.event();
+        if discovery_payload.hash.component != component.to_string() {
+            return;
+        }
+        debug!("setup_new_entity_from_discovery: {:?}", discovery_payload);
+        if let Ok(pending_components) =
+            serde_json::from_value::<MQTTDiscoveryComponents>(discovery_payload.payload.clone())
+        {
+            if let Some(device_spec) = pending_components.device {
+                let mut new_device_info = DeviceInfo::from_config(DOMAIN, device_spec);
+                let mut not_find = true;
+                for mut device in q_devices.iter_mut() {
+                    if device.identifiers == new_device_info.identifiers {
+                        debug!(
+                            "Device  {:?} already exists, updating",
+                            new_device_info.identifiers
+                        );
+                        not_find = false;
+                        device.update_from_device_info(new_device_info.clone());
+                        return;
+                    }
+                }
+
+                if not_find {
+                    debug!(
+                        "Device  {:?} not found, creating",
+                        new_device_info.identifiers
+                    );
+                    commands.entity(trigger.entity()).with_children(|c| {
+                        let mut device = Device::default();
+                        device.update_from_device_info(new_device_info.clone());
+                        c.spawn(device);
+                    });
+                }
+            }
         }
     }
 }
@@ -263,6 +296,12 @@ struct DiscoveryDefaultBundle {
     discovery_hash: MQTTDiscoveryHash,
     discovery_payload: MQTTDiscoveryPayload,
     state_subscription: MQTTStateSubscription,
+}
+
+pub struct DiscoveryData {
+    pub discovery_hash: MQTTDiscoveryHash,
+    pub discovery_data: Value,
+    pub discovery_topic: String,
 }
 
 fn handle_discovery_message(payload: &[u8]) -> anyhow::Result<Map<String, Value>> {
