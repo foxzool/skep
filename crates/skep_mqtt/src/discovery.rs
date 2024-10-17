@@ -22,7 +22,7 @@ use bevy_ecs::{
     system::EntityCommands,
     world::DeferredWorld,
 };
-use bevy_hierarchy::{BuildChildren, Children, Parent};
+use bevy_hierarchy::{BuildChildren, ChildBuilder, Children, Parent};
 use bevy_reflect::Reflect;
 use bevy_utils::{hashbrown::HashSet, HashMap};
 use regex::{Error, Regex};
@@ -161,9 +161,6 @@ pub(crate) fn on_mqtt_message_received(
     mut publish_ev: EventReader<MqttPublishPacket>,
     mut query: Query<(&mut SkepMqttPlatform, &Children)>,
     mut commands: Commands,
-    q_components: Query<&MQTTSupportComponent>,
-    mut new_discovery: EventWriter<MQTTDiscoveryNew>,
-    mut update_discovery: EventWriter<MQTTDiscoveryUpdate>,
 ) {
     for packet in publish_ev.read() {
         let platform_entity = packet.entity;
@@ -249,21 +246,24 @@ pub(crate) fn setup_new_entity_from_discovery(
     trigger: Trigger<MQTTDiscoveryNew>,
     mut commands: Commands,
     q_mqtt_component: Query<&MQTTSupportComponent>,
-    mut q_devices: Query<&mut Device>,
+    mut q_devices: Query<(Entity, &mut Device, &Children)>,
+    mut q_entities: Query<(Entity, &MQTTDiscoveryHash)>,
 ) {
-    if let Ok(mut component) = q_mqtt_component.get(trigger.entity()) {
+    let component_entity = trigger.entity();
+    if let Ok(mut component) = q_mqtt_component.get(component_entity) {
         let discovery_payload = trigger.event();
         if discovery_payload.hash.component != component.to_string() {
             return;
         }
-        debug!("setup_new_entity_from_discovery: {:?}", discovery_payload);
+        trace!("setup_new_entity_from_discovery: {:?}", discovery_payload);
         if let Ok(pending_components) =
             serde_json::from_value::<MQTTDiscoveryComponents>(discovery_payload.payload.clone())
         {
-            if let Some(device_spec) = pending_components.device {
+            let mut device_id = None;
+            if let Some(device_spec) = pending_components.device.clone() {
                 let mut new_device_info = DeviceInfo::from_config(DOMAIN, device_spec);
                 let mut not_find = true;
-                for mut device in q_devices.iter_mut() {
+                'fd: for (device_entity, mut device, children) in q_devices.iter_mut() {
                     if device.identifiers == new_device_info.identifiers {
                         debug!(
                             "Device  {:?} already exists, updating",
@@ -271,20 +271,55 @@ pub(crate) fn setup_new_entity_from_discovery(
                         );
                         not_find = false;
                         device.update_from_device_info(new_device_info.clone());
-                        return;
+                        device_id = Some(device_entity);
+
+                        // create or update entity
+                        let mut not_find = true;
+                        'ct: for child in children.iter() {
+                            if let Ok((eid, discovery_hash)) = q_entities.get(*child) {
+                                if discovery_hash == &discovery_payload.hash {
+                                    let mut cmds = commands.entity(eid);
+                                    spawn_or_update_components(
+                                        &mut cmds,
+                                        pending_components.clone(),
+                                    );
+                                    not_find = false;
+                                    break 'ct;
+                                }
+                            }
+                        }
+
+                        if not_find {
+                            let mut cmds = commands.spawn(discovery_payload.hash.clone());
+                            spawn_or_update_components(&mut cmds, pending_components.clone());
+                            let id = cmds.id();
+                            commands.entity(device_entity).add_child(id);
+                        };
+
+                        break 'fd;
                     }
                 }
 
                 if not_find {
                     debug!(
-                        "Device  {:?} not found, creating",
+                        "Device {:?} not found, creating",
                         new_device_info.identifiers
                     );
-                    commands.entity(trigger.entity()).with_children(|c| {
-                        let mut device = Device::default();
-                        device.update_from_device_info(new_device_info.clone());
-                        c.spawn(device);
-                    });
+                    let mut device = Device::default();
+                    device.update_from_device_info(new_device_info.clone());
+
+                    let id = commands
+                        .spawn(device)
+                        .with_children(|parent| {
+                            debug!("Creating new device entity {}", discovery_payload.hash);
+                            let mut cmds = parent.spawn(discovery_payload.hash.clone());
+                            spawn_or_update_components(&mut cmds, pending_components);
+                        })
+                        .id();
+                    commands.entity(component_entity).add_child(id);
+                    device_id = Some(id);
+                    // let mut cmds = commands.entity(id);
+                    //
                 }
             }
         }
@@ -330,6 +365,7 @@ fn handle_discovery_message(payload: &[u8]) -> anyhow::Result<Map<String, Value>
 
 /// Spawn or Update MQTT components from discovery payload
 fn spawn_or_update_components(cmds: &mut EntityCommands, components: MQTTDiscoveryComponents) {
+    cmds.insert(components.state_subscription);
     if let Some(availability_config) = components.availability_config {
         let availability = MQTTAvailability::from_config(availability_config);
 
@@ -343,7 +379,7 @@ fn spawn_or_update_components(cmds: &mut EntityCommands, components: MQTTDiscove
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Clone)]
 struct MQTTDiscoveryComponents {
     #[serde(flatten)]
     state_subscription: MQTTStateSubscription,

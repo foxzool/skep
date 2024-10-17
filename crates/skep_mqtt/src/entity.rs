@@ -363,7 +363,7 @@ name must be included in each entity's device configuration",
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct MQTTAvailabilityConfiguration {
     pub payload_available: Option<String>,
     pub payload_not_available: Option<String>,
@@ -373,7 +373,7 @@ pub struct MQTTAvailabilityConfiguration {
     pub availability_mode: Option<MQTTAvailabilityMode>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Reflect)]
+#[derive(Debug, Serialize, Deserialize, Reflect, Clone)]
 pub struct AvailabilityConfig {
     pub payload_available: Option<String>,
     pub payload_not_available: Option<String>,
@@ -391,7 +391,7 @@ impl AvailabilityConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Default, Reflect)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Default, Reflect, Clone)]
 #[reflect(PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum MQTTAvailabilityMode {

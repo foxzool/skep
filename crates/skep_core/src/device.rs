@@ -1,5 +1,5 @@
-use crate::{helper::device_registry::DeviceInfo, integration::Integration, platform::Platform};
-use bevy_app::{App, Plugin, Update};
+use crate::helper::device_registry::DeviceInfo;
+use bevy_app::{App, Plugin};
 use bevy_core::Name;
 use bevy_derive::{Deref, DerefMut};
 use bevy_ecs::{
@@ -7,7 +7,6 @@ use bevy_ecs::{
     prelude::*,
     world::DeferredWorld,
 };
-use bevy_hierarchy::{HierarchyQueryExt, Parent};
 use bevy_reflect::{Reflect, TypePath};
 use bevy_utils::{tracing::debug, HashMap, HashSet};
 use chrono::Utc;
