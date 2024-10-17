@@ -5,13 +5,11 @@ use serde_json::Value;
 use skep_core::constants::EntityCategory;
 use skep_sensor::SensorDeviceClass;
 
-use crate::discovery::{setup_new_entity_from_discovery, MQTTDiscoveryNew, MQTTSupportComponent};
-use bevy_core::Name;
+use crate::discovery::MQTTDiscoveryNew;
 use bevy_ecs::{
     prelude::{Added, Commands},
     system::Query,
 };
-use bevy_hierarchy::BuildChildren;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -29,8 +27,8 @@ pub struct MqttSensorPlugin;
 
 impl Plugin for MqttSensorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, on_mqtt_platform_added);
-        // .add_systems(Update, create_by_discovery_payload);
+        app.add_systems(Update, on_mqtt_platform_added)
+            .add_systems(Update, create_by_discovery_payload);
     }
 }
 
@@ -40,16 +38,15 @@ const DEFAULT_FORCE_UPDATE: bool = false;
 const DOMAIN: &str = "sensor";
 
 fn on_mqtt_platform_added(
-    mut commands: Commands,
     mut q_platform: Query<(Entity, &mut SkepMqttPlatform), (Added<SkepMqttPlatform>)>,
 ) {
-    for (entity, mut platform) in q_platform.iter_mut() {
+    for (_entity, mut platform) in q_platform.iter_mut() {
         platform.platforms_loaded.insert(DOMAIN.to_string());
-        let id = commands
-            .spawn((Name::new("sensor"), MQTTSupportComponent::Sensor))
-            .observe(setup_new_entity_from_discovery)
-            .id();
-        commands.entity(entity).add_child(id);
+        // let id = commands
+        //     .spawn((Name::new("sensor"), MQTTSupportComponent::Sensor))
+        //
+        //     .id();
+        // commands.entity(entity).add_child(id);
     }
 }
 
