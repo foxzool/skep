@@ -276,7 +276,7 @@ pub(crate) fn setup_new_entity_from_discovery(
                         if let Ok((eid, discovery_hash)) = q_entities.get(*child) {
                             if discovery_hash == &discovery_payload.hash {
                                 let mut cmds = commands.entity(eid);
-                                spawn_or_update_components(&mut cmds, pending_components.clone());
+                                spawn_or_update_components(&mut cmds, &discovery_payload);
                                 not_find = false;
                                 break 'ct;
                             }
@@ -285,7 +285,7 @@ pub(crate) fn setup_new_entity_from_discovery(
 
                     if not_find {
                         let mut cmds = commands.spawn(discovery_payload.hash.clone());
-                        spawn_or_update_components(&mut cmds, pending_components.clone());
+                        spawn_or_update_components(&mut cmds, &discovery_payload);
                         let id = cmds.id();
                         commands.entity(device_entity).add_child(id);
                     };
@@ -304,7 +304,7 @@ pub(crate) fn setup_new_entity_from_discovery(
                     .with_children(|parent| {
                         debug!("Creating new device entity {}", discovery_payload.hash);
                         let mut cmds = parent.spawn(discovery_payload.hash.clone());
-                        spawn_or_update_components(&mut cmds, pending_components);
+                        spawn_or_update_components(&mut cmds, &discovery_payload);
                     })
                     .id();
                 commands.entity(component_entity).add_child(id);
@@ -325,10 +325,7 @@ pub(crate) fn update_entity_from_discovery(
     for (entity, discovery_hash) in q_entities.iter() {
         if discovery_hash == &discovery_payload.hash {
             let mut cmds = commands.entity(entity);
-            spawn_or_update_components(
-                &mut cmds,
-                serde_json::from_value(discovery_payload.payload.clone()).unwrap(),
-            );
+            spawn_or_update_components(&mut cmds, &discovery_payload);
         }
     }
 }
@@ -371,18 +368,23 @@ fn handle_discovery_message(payload: &[u8]) -> anyhow::Result<Map<String, Value>
 }
 
 /// Spawn or Update MQTT components from discovery payload
-fn spawn_or_update_components(cmds: &mut EntityCommands, components: MQTTDiscoveryComponents) {
-    cmds.insert(components.state_subscription);
-    if let Some(availability_config) = components.availability_config {
-        let availability = MQTTAvailability::from_config(availability_config);
+fn spawn_or_update_components(cmds: &mut EntityCommands, discovery_payload: &MQTTDiscoveryPayload) {
+    if let Ok(mut components) =
+        serde_json::from_value::<MQTTDiscoveryComponents>(discovery_payload.payload.clone())
+    {
+        cmds.insert(discovery_payload.clone());
+        cmds.insert(components.state_subscription);
+        if let Some(availability_config) = components.availability_config {
+            let availability = MQTTAvailability::from_config(availability_config);
 
-        if !availability.topic.is_empty() {
-            cmds.insert(availability);
+            if !availability.topic.is_empty() {
+                cmds.insert(availability);
+            }
         }
-    }
 
-    if let Some(entity_category) = components.entity_category {
-        cmds.insert(entity_category);
+        if let Some(entity_category) = components.entity_category {
+            cmds.insert(entity_category);
+        }
     }
 }
 

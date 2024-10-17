@@ -5,7 +5,6 @@ use crate::{
         CONF_PAYLOAD_NOT_AVAILABLE, CONF_TOPIC,
     },
     discovery::MQTTDiscoveryPayload,
-    subscription::EntitySubscription,
     DiscoveryInfoType,
 };
 use bevy_derive::{Deref, DerefMut};
@@ -38,7 +37,7 @@ use std::{
 pub struct MqttEntityComponent {
     device_specifications: Option<HashMap<String, Value>>,
     config: ConfigType,
-    sub_state: HashMap<String, EntitySubscription>,
+    // sub_state: HashMap<String, EntitySubscription>,
     discovery: bool,
     subscriptions: HashMap<String, HashMap<String, Value>>,
     default_name: Option<String>,
@@ -119,14 +118,6 @@ name must be included in each entity's device configuration",
     }
 
     fn init_entity_id(&mut self) {}
-}
-
-pub trait MqttAttributesMixin: SkepEntity {
-    fn init_attributes(&mut self, config: ConfigType);
-    fn attributes_sub_state(&self) -> &HashMap<String, EntitySubscription>;
-    fn set_attributes_sub_state(&mut self, sub_state: HashMap<String, EntitySubscription>);
-    fn attributes_config(&self) -> &ConfigType;
-    fn set_attributes_config(&mut self, config: ConfigType);
 }
 
 pub trait MqttAvailabilityMixin: SkepEntity {
@@ -246,9 +237,7 @@ pub trait MqttEntityDeviceInfo: SkepEntity {
     fn init(specifications: Option<HashMap<String, Value>>, config_entry: ConfigEntry) -> Self;
 }
 
-pub trait MqttEntity:
-    MqttAttributesMixin + MqttAttributesMixin + MqttDiscoveryUpdateMixin + MqttEntityDeviceInfo
-{
+pub trait MqttEntity: MqttDiscoveryUpdateMixin + MqttEntityDeviceInfo {
     fn default_name(&self) -> Option<String>;
 
     fn get_attr_force_update(&self) -> bool {

@@ -32,9 +32,6 @@ impl Plugin for MqttSensorPlugin {
     }
 }
 
-const DEFAULT_NAME: &str = "MQTT Sensor";
-const DEFAULT_FORCE_UPDATE: bool = false;
-
 const DOMAIN: &str = "sensor";
 
 fn on_mqtt_platform_added(
@@ -50,10 +47,7 @@ fn on_mqtt_platform_added(
     }
 }
 
-fn create_by_discovery_payload(
-    mut commands: Commands,
-    mut create_ev: EventReader<MQTTDiscoveryNew>,
-) {
+fn create_by_discovery_payload(mut create_ev: EventReader<MQTTDiscoveryNew>) {
     for ev in create_ev.read() {
         if ev.hash.component == DOMAIN {
             println!("mqtt sensor Create by discovery payload: {:#?}", ev);
