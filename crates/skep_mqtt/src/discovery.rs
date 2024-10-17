@@ -36,6 +36,7 @@ use skep_core::{
         entity::SkepEntityComponent,
     },
     platform::Platform,
+    states::StateAttributes,
     typing::SetupConfigEntry,
 };
 use std::{
@@ -61,7 +62,7 @@ pub struct MQTTDiscoveryHash {
 
 impl Display for MQTTDiscoveryHash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.component, self.discovery_id)
+        write!(f, "{}.{}", self.component, self.discovery_id)
     }
 }
 
@@ -72,7 +73,7 @@ impl Component for MQTTDiscoveryHash {
         hooks.on_insert(|mut world: DeferredWorld, entity, _component_id| {
             let discovery_hash = world.get::<MQTTDiscoveryHash>(entity).unwrap();
             let name = Name::new(format!(
-                "{} {}",
+                "{}.{}",
                 discovery_hash.component, discovery_hash.discovery_id
             ));
             let mut commands = world.commands();
@@ -382,6 +383,10 @@ fn spawn_or_update_components(cmds: &mut EntityCommands, discovery_payload: &MQT
             }
         }
 
+        if let Some(attributes) = components.state_attributes {
+            cmds.insert(attributes);
+        }
+
         if let Some(entity_category) = components.entity_category {
             cmds.insert(entity_category);
         }
@@ -397,6 +402,8 @@ struct MQTTDiscoveryComponents {
     #[serde(flatten)]
     entity_category: Option<EntityCategory>,
     device: Option<DeviceSpec>,
+    #[serde(flatten)]
+    state_attributes: Option<StateAttributes>,
 }
 
 // Replace all abbreviations in the payload

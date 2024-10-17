@@ -7,6 +7,7 @@ use crate::{
     integration::Integration,
     loader::load_config_toml,
     platform::Platform,
+    states::{State, StateAttributes},
 };
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::{
@@ -20,6 +21,7 @@ use slugify::slugify;
 
 pub mod config_entry;
 pub mod constants;
+pub mod context;
 pub mod device;
 pub mod domain;
 pub mod entity;
@@ -40,6 +42,8 @@ impl Plugin for SkepCorePlugin {
             .register_type::<Platform>()
             .register_type::<Domain>()
             .register_type::<SkepResource>()
+            .register_type::<State>()
+            .register_type::<StateAttributes>()
             .register_type::<EntityCategory>()
             .init_resource::<SkepResource>()
             // .register_type::<DeviceEntry>()

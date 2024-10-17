@@ -19,6 +19,7 @@ use bytes::Bytes;
 use minijinja::{context, Environment};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use skep_core::states::State;
 use std::process::{Child, Command};
 use tera::{Context, Tera};
 
@@ -75,6 +76,7 @@ pub(crate) fn update_available_subscription(
 
             if let Some(children) = opt_children {
                 for avail_config in avail.topic.values() {
+                    debug!("avail_config: {:?}", avail_config);
                     for child in children {
                         let child_id = *child;
                         let child_topic = q_child.get(child_id).unwrap().topic();
@@ -114,13 +116,23 @@ pub(crate) fn update_available_subscription(
 
 fn handle_state_value(
     topic_message: Trigger<TopicMessage>,
-    q_state_sub: Query<(&MQTTStateSubscription, &Name)>,
+    mut commands: Commands,
+    mut q_state_sub: Query<(Entity, &MQTTStateSubscription, &Name, Option<&mut State>)>,
 ) {
-    if let Ok((state_sub, name)) = q_state_sub.get(topic_message.entity()) {
+    if let Ok((entity, state_sub, name, mut opt_state)) =
+        q_state_sub.get_mut(topic_message.entity())
+    {
         if topic_message.event().topic == state_sub.state_topic {
             let update_state =
                 try_render_template(&state_sub.value_template, &topic_message.event().payload)
                     .unwrap_or_default();
+            if let Some(mut state) = opt_state {
+                state.update(&update_state);
+            } else {
+                let state = State::new(update_state.clone());
+                commands.entity(entity).insert(state);
+            }
+
             if !update_state.is_empty() {
                 debug!("{}: {}", name, update_state);
             }
@@ -154,6 +166,9 @@ fn handle_available_value(
     mut q_avail: Query<(&mut MQTTAvailability, &Name)>,
 ) {
     if let Ok((mut available, name)) = q_avail.get_mut(topic_message.entity()) {
+        if available.topic.get(&topic_message.event().topic).is_none() {
+            return;
+        }
         let update_status = try_render_available(&available, &topic_message.event()).ok();
         if let Some(update_status) = update_status {
             available
@@ -161,7 +176,7 @@ fn handle_available_value(
                 .insert(topic_message.event().topic.clone(), update_status);
             available.available_latest = update_status;
             debug!(
-                "{} {} status: {:?}",
+                "entity: {} topic: {} status: {:?}",
                 name,
                 topic_message.event().topic.clone(),
                 update_status
