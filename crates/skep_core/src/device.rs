@@ -11,7 +11,7 @@ use bevy_reflect::{Reflect, TypePath};
 use bevy_utils::{tracing::debug, HashMap, HashSet};
 use chrono::Utc;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::hash::Hash;
+use std::{fmt::Display, hash::Hash};
 use uuid::Uuid;
 
 pub(crate) struct SkepDevicePlugin;
@@ -153,6 +153,16 @@ impl Eq for TupleString {}
 
 #[derive(Debug, Default, Clone, Reflect)]
 pub struct HashsetTupleString(pub HashSet<TupleString>);
+
+impl Display for HashsetTupleString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut tuple_string = String::new();
+        for tuple in &self.0 {
+            tuple_string.push_str(&format!("'{}.{}' ", tuple.0 .0, tuple.0 .1));
+        }
+        write!(f, "{}", tuple_string)
+    }
+}
 
 impl Hash for HashsetTupleString {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {

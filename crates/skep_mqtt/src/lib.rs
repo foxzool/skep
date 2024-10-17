@@ -3,8 +3,8 @@ use crate::{
     constants::DOMAIN,
     discovery::{
         on_mqtt_message_received, setup_new_entity_from_discovery, sub_default_topic,
-        MQTTDiscoveryHash, MQTTDiscoveryNew, MQTTDiscoveryPayload, MQTTDiscoveryUpdate,
-        MQTTSupportComponent, ProcessDiscoveryPayload,
+        update_entity_from_discovery, MQTTDiscoveryHash, MQTTDiscoveryNew, MQTTDiscoveryPayload,
+        MQTTDiscoveryUpdate, MQTTSupportComponent, ProcessDiscoveryPayload,
     },
     entity::{MQTTAvailability, MQTTAvailabilityConfiguration},
     sensor::MqttSensorPlugin,
@@ -192,7 +192,8 @@ pub fn reload_config(trigger: Trigger<LoadConfig>, mut commands: Commands) {
                         },
                         SkepMqttPlatform::default(),
                     ))
-                    .observe(setup_new_entity_from_discovery);
+                    .observe(setup_new_entity_from_discovery)
+                    .observe(update_entity_from_discovery);
             }
         }
     }

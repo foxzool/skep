@@ -244,7 +244,6 @@ pub(crate) fn on_mqtt_message_received(
 pub(crate) fn setup_new_entity_from_discovery(
     trigger: Trigger<MQTTDiscoveryNew>,
     mut commands: Commands,
-    q_mqtt_component: Query<&MQTTSupportComponent>,
     mut q_devices: Query<(Entity, &mut Device, &Children)>,
     mut q_entities: Query<(Entity, &MQTTDiscoveryHash)>,
 ) {
@@ -263,8 +262,8 @@ pub(crate) fn setup_new_entity_from_discovery(
             let mut not_find = true;
             'fd: for (device_entity, mut device, children) in q_devices.iter_mut() {
                 if device.identifiers == new_device_info.identifiers {
-                    debug!(
-                        "Device  {:?} already exists, updating",
+                    trace!(
+                        "Device {} already exists, updating",
                         new_device_info.identifiers
                     );
                     not_find = false;
@@ -296,10 +295,7 @@ pub(crate) fn setup_new_entity_from_discovery(
             }
 
             if not_find {
-                debug!(
-                    "Device {:?} not found, creating",
-                    new_device_info.identifiers
-                );
+                debug!("Device {} not found, creating", new_device_info.identifiers);
                 let mut device = Device::default();
                 device.update_from_device_info(new_device_info.clone());
 
@@ -313,9 +309,26 @@ pub(crate) fn setup_new_entity_from_discovery(
                     .id();
                 commands.entity(component_entity).add_child(id);
                 device_id = Some(id);
-                // let mut cmds = commands.entity(id);
-                //
             }
+        }
+    }
+}
+
+pub(crate) fn update_entity_from_discovery(
+    trigger: Trigger<MQTTDiscoveryUpdate>,
+    mut commands: Commands,
+    mut q_entities: Query<(Entity, &MQTTDiscoveryHash)>,
+) {
+    let discovery_payload = trigger.event();
+
+    debug!("update_entity_from_discovery: {:?}", discovery_payload);
+    for (entity, discovery_hash) in q_entities.iter() {
+        if discovery_hash == &discovery_payload.hash {
+            let mut cmds = commands.entity(entity);
+            spawn_or_update_components(
+                &mut cmds,
+                serde_json::from_value(discovery_payload.payload.clone()).unwrap(),
+            );
         }
     }
 }
