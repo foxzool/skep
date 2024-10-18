@@ -10,7 +10,7 @@ use bevy_ecs::{
 use bevy_reflect::{Reflect, TypePath};
 use bevy_utils::{HashMap, HashSet};
 use chrono::Utc;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use std::{fmt::Display, hash::Hash};
 use uuid::Uuid;
 

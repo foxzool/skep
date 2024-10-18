@@ -25,6 +25,7 @@ use bevy_ecs::{
 use bevy_hierarchy::{BuildChildren, ChildBuilder, Children, Parent};
 use bevy_reflect::Reflect;
 use bevy_utils::{hashbrown::HashSet, HashMap};
+use chrono::Utc;
 use regex::{Error, Regex};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -36,7 +37,7 @@ use skep_core::{
         entity::SkepEntityComponent,
     },
     platform::Platform,
-    states::StateAttributes,
+    states::{StateAttributes, StateUpdateTime},
     typing::SetupConfigEntry,
 };
 use std::{
@@ -384,7 +385,14 @@ fn spawn_or_update_components(cmds: &mut EntityCommands, discovery_payload: &MQT
         }
 
         if let Some(attributes) = components.state_attributes {
-            cmds.insert(attributes);
+            cmds.insert((
+                attributes,
+                StateUpdateTime {
+                    last_reported: Some(Utc::now()),
+                    last_updated: Some(Utc::now()),
+                    ..Default::default()
+                },
+            ));
         }
 
         if let Some(entity_category) = components.entity_category {

@@ -7,7 +7,7 @@ use crate::{
     integration::Integration,
     loader::load_config_toml,
     platform::Platform,
-    states::{State, StateAttributes},
+    states::{SkepStatePlugin, State, StateAttributes},
 };
 use bevy_app::{App, Plugin, Startup};
 use bevy_ecs::{
@@ -37,17 +37,22 @@ pub struct SkepCorePlugin;
 
 impl Plugin for SkepCorePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((SkepEntityPlugin, SkepDevicePlugin, SkepCoreEventPlugin))
-            .register_type::<Integration>()
-            .register_type::<Platform>()
-            .register_type::<Domain>()
-            .register_type::<SkepResource>()
-            .register_type::<State>()
-            .register_type::<StateAttributes>()
-            .register_type::<EntityCategory>()
-            .init_resource::<SkepResource>()
-            // .register_type::<DeviceEntry>()
-            .add_systems(Startup, load_config_toml);
+        app.add_plugins((
+            SkepEntityPlugin,
+            SkepDevicePlugin,
+            SkepCoreEventPlugin,
+            SkepStatePlugin,
+        ))
+        .register_type::<Integration>()
+        .register_type::<Platform>()
+        .register_type::<Domain>()
+        .register_type::<SkepResource>()
+        .register_type::<State>()
+        .register_type::<StateAttributes>()
+        .register_type::<EntityCategory>()
+        .init_resource::<SkepResource>()
+        // .register_type::<DeviceEntry>()
+        .add_systems(Startup, load_config_toml);
     }
 }
 

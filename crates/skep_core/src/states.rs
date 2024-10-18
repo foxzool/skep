@@ -1,18 +1,22 @@
 use crate::context::Context;
-use bevy_ecs::prelude::Component;
+use bevy_app::{App, Plugin, PostUpdate};
+use bevy_ecs::{change_detection::DetectChanges, prelude::*};
 use bevy_reflect::Reflect;
 use chrono::{DateTime, Utc};
+use log::debug;
 use serde::{Deserialize, Serialize};
+
+pub struct SkepStatePlugin;
+
+impl Plugin for SkepStatePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(PostUpdate, update_time);
+    }
+}
 
 #[derive(Debug, Component, Reflect)]
 pub struct State {
     pub state: String,
-    #[reflect(ignore)]
-    pub last_changed: Option<DateTime<Utc>>,
-    #[reflect(ignore)]
-    pub last_reported: Option<DateTime<Utc>>,
-    #[reflect(ignore)]
-    pub last_updated: Option<DateTime<Utc>>,
     pub context: Context,
 }
 
@@ -20,9 +24,6 @@ impl State {
     pub fn new(state: String) -> Self {
         Self {
             state,
-            last_changed: None,
-            last_reported: None,
-            last_updated: None,
             context: Default::default(),
         }
     }
@@ -30,6 +31,16 @@ impl State {
     pub fn update(&mut self, new_state: impl ToString) {
         self.state = new_state.to_string();
     }
+}
+
+#[derive(Debug, Component, Default)]
+pub struct StateUpdateTime {
+    /// The last time the state was changed
+    pub last_changed: Option<DateTime<Utc>>,
+    /// The last time the state or state_attributes was reported
+    pub last_reported: Option<DateTime<Utc>>,
+    /// The last time the state or state_attributes was changed
+    pub last_updated: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Component, Serialize, Deserialize, Reflect, Clone)]
@@ -42,6 +53,29 @@ pub struct StateAttributes {
     pub attribution: Option<String>,
     pub device_class: Option<String>,
     pub supported_features: Option<i32>,
+}
+
+fn update_time(
+    mut q_attr_changed: Query<(
+        &mut StateUpdateTime,
+        Ref<StateAttributes>,
+        Option<Ref<State>>,
+    )>,
+) {
+    for (mut update_time, attributes, opt_state) in q_attr_changed.iter_mut() {
+        let now = Utc::now();
+        if attributes.is_changed() {
+            update_time.last_reported = Some(now);
+            update_time.last_updated = Some(now);
+        }
+
+        if let Some(state) = opt_state {
+            if state.is_changed() {
+                update_time.last_reported = Some(now);
+                update_time.last_changed = Some(now);
+            }
+        }
+    }
 }
 
 #[test]
