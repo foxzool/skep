@@ -1,6 +1,8 @@
 use crate::{
     discovery::{MQTTDiscoveryHash, MQTTDiscoveryPayload},
-    entity::{MQTTAvailability, MQTTAvailabilityConfiguration},
+    entity::{
+        handle_available_value, handle_state_value, MQTTAvailability, MQTTAvailabilityConfiguration,
+    },
 };
 use bevy_app::Update;
 use bevy_core::Name;
@@ -12,7 +14,7 @@ use bevy_ecs::{
 };
 use bevy_hierarchy::{BuildChildren, Children, DespawnRecursiveExt, HierarchyQueryExt};
 use bevy_log::debug;
-use bevy_mqtt::{rumqttc::QoS, SubscribeTopic, TopicMessage};
+use bevy_mqtt::{rumqttc::QoS, PacketCache, SubscribeTopic, TopicMessage};
 use bevy_reflect::{Map, Reflect};
 use bevy_utils::{HashMap, HashSet};
 use bytes::Bytes;
@@ -27,7 +29,7 @@ use tera::{Context, Tera};
 pub struct MQTTStateSubscription {
     pub state_topic: String,
     pub value_template: Option<String>,
-    pub qos: Option<i32>, // default 0
+    pub qos: Option<u8>, // default 0
 }
 
 pub(crate) fn add_state_subscription(
@@ -84,7 +86,7 @@ pub(crate) fn update_available_subscription(
                             continue;
                         }
                         let sub_topic = SubscribeTopic::new(child_topic, 0);
-                        let child_id = commands.spawn(sub_topic).id();
+                        let child_id = commands.spawn((sub_topic, PacketCache::default())).id();
                         commands
                             .entity(entity)
                             .add_child(child_id)
@@ -112,127 +114,4 @@ pub(crate) fn update_available_subscription(
             }
         }
     }
-}
-
-fn handle_state_value(
-    topic_message: Trigger<TopicMessage>,
-    mut commands: Commands,
-    mut q_state_sub: Query<(Entity, &MQTTStateSubscription, &Name, Option<&mut State>)>,
-) {
-    if let Ok((entity, state_sub, name, mut opt_state)) =
-        q_state_sub.get_mut(topic_message.entity())
-    {
-        if topic_message.event().topic == state_sub.state_topic {
-            let update_state =
-                try_render_template(&state_sub.value_template, &topic_message.event().payload)
-                    .unwrap_or_default();
-            if let Some(mut state) = opt_state {
-                state.update(&update_state);
-            } else {
-                let state = State::new(update_state.clone());
-                commands.entity(entity).insert(state);
-            }
-
-            if !update_state.is_empty() {
-                debug!("{}: {}", name, update_state);
-            }
-        }
-    }
-}
-
-fn try_render_template(
-    value_template: &Option<String>,
-    value_bytes: &[u8],
-) -> anyhow::Result<String> {
-    if let Some(value_template) = value_template {
-        let mut env = Environment::new();
-        env.add_template("value", &value_template)?;
-        let template = env.get_template("value")?;
-
-        let template_value = if let Ok(state_json) = serde_json::from_slice::<Value>(value_bytes) {
-            template.render(context! { value_json => state_json })?
-        } else {
-            template.render(context! { value => value_bytes })?
-        };
-
-        Ok(template_value)
-    } else {
-        Ok(std::str::from_utf8(value_bytes)?.to_string())
-    }
-}
-
-fn handle_available_value(
-    topic_message: Trigger<TopicMessage>,
-    mut q_avail: Query<(&mut MQTTAvailability, &Name)>,
-) {
-    if let Ok((mut available, name)) = q_avail.get_mut(topic_message.entity()) {
-        if available.topic.get(&topic_message.event().topic).is_none() {
-            return;
-        }
-        let update_status = try_render_available(&available, &topic_message.event()).ok();
-        if let Some(update_status) = update_status {
-            available
-                .avail_topics
-                .insert(topic_message.event().topic.clone(), update_status);
-            available.available_latest = update_status;
-            debug!(
-                "entity: {} topic: {} status: {:?}",
-                name,
-                topic_message.event().topic.clone(),
-                update_status
-            );
-        }
-    }
-}
-
-fn try_render_available(
-    avail_config: &MQTTAvailability,
-    message: &TopicMessage,
-) -> anyhow::Result<bool> {
-    if let Some(config) = avail_config.topic.get(&message.topic) {
-        let payload_available_str = config.payload_available();
-        let payload_not_available_str = config.payload_not_available();
-        let status_str = String::from_utf8(message.payload.to_vec())?;
-
-        let match_value = match &config.value_template {
-            Some(available_template) => {
-                let mut env = Environment::new();
-                env.add_template("available", &available_template)?;
-                let template = env.get_template("available")?;
-                let template_value =
-                    if let Ok(state_json) = serde_json::from_str::<Value>(&status_str) {
-                        template.render(context! { value_json => state_json })?
-                    } else {
-                        template.render(context! { value => status_str })?
-                    };
-
-                template_value
-            }
-            None => status_str,
-        };
-
-        return if payload_available_str == match_value {
-            Ok(true)
-        } else if payload_not_available_str == match_value {
-            Ok(false)
-        } else {
-            Err(anyhow::anyhow!(
-                "Invalid availability template: {}",
-                match_value
-            ))
-        };
-    }
-
-    Ok(false)
-}
-
-#[test]
-fn test_template() {
-    let mut env = Environment::new();
-    env.add_template("state", "{{ 'OFF' if 'no error' in value else 'ON' }}")
-        .unwrap();
-
-    let template = env.get_template("state").unwrap();
-    let str = template.render(context! { value => "no error" }).unwrap();
-    println!("str: {:?}", str);
 }

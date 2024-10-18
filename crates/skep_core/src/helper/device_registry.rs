@@ -1,8 +1,4 @@
-use crate::{
-    device::{DeviceEntryType, HashsetTupleString, TupleString},
-    typing::ConfigType,
-};
-use bevy_ecs::prelude::Component;
+use crate::device::{DeviceEntryType, HashsetTupleString, TupleString};
 use bevy_reflect::Reflect;
 use bevy_utils::{tracing::debug, HashMap, HashSet};
 use chrono::Utc;
